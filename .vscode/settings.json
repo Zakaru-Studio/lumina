@@ -1,0 +1,10 @@
+{
+  "rust-analyzer.linkedProjects": ["src-tauri/Cargo.toml"],
+  "rust-analyzer.check.command": "clippy",
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "editor.formatOnSave": false,
+  "files.watcherExclude": {
+    "**/src-tauri/target/**": true,
+    "**/node_modules/**": true
+  }
+}

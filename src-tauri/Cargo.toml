@@ -1,0 +1,82 @@
+[package]
+name = "lumina"
+version = "0.1.0"
+description = "Lumina — a fast, local-first modern photo library manager."
+authors = ["Lumina"]
+edition = "2021"
+rust-version = "1.77"
+
+# The library that holds all backend logic. `main.rs` is a thin wrapper so the
+# same code can be exercised from integration tests and (later) other frontends.
+[lib]
+name = "lumina_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "lumina"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# --- Tauri ---
+# `protocol-asset` enables the asset protocol used to serve cached thumbnails
+# to the webview via `convertFileSrc` (zero-copy, no IPC).
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-opener = "2"
+
+# --- Async runtime & parallelism ---
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "time"] }
+rayon = "1.10"
+num_cpus = "1.16"
+
+# --- Database ---
+rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.25"
+
+# --- Images & metadata ---
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp", "tiff"] }
+fast_image_resize = { version = "5", features = ["image"] }
+kamadak-exif = "0.5"
+
+# --- Filesystem ---
+walkdir = "2.5"
+notify = "6.1"
+notify-debouncer-full = "0.3"
+
+# --- Serialization & misc ---
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1.11", features = ["v4", "serde"] }
+anyhow = "1"
+thiserror = "2"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+sha2 = "0.10"
+
+# --- Observability ---
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# --- Caching ---
+lru = "0.12"
+parking_lot = "0.12"
+
+[dev-dependencies]
+tempfile = "3.14"
+
+[features]
+# Compile-time switch for optional HEIC support. Disabled by default because it
+# requires a system libheif; the code path degrades gracefully when absent.
+heic = []
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true
