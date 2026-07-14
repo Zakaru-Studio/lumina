@@ -10,9 +10,8 @@ import { SelectionToolbar } from "@/components/library/SelectionToolbar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAlbums } from "@/hooks/useAlbums";
-import { useGlobalShortcuts } from "@/hooks/useKeyboard";
+import { usePhotoBrowser } from "@/hooks/usePhotoBrowser";
 import { useLibraryStats } from "@/hooks/usePhotos";
-import { usePhotoIds, usePhotoWindow } from "@/hooks/useWindowedPhotos";
 import { useScanControls } from "@/hooks/useScan";
 import { buildQuery } from "@/lib/query";
 import { useUiStore } from "@/stores/uiStore";
@@ -50,19 +49,16 @@ function isFiltered(query: PhotoQuery): boolean {
 export function LibraryPage() {
   const { t } = useTranslation();
   const [query, setQuery] = useState<PhotoQuery>(() => buildQuery());
-  // Windowed model: the full id list sizes the scrollbar; the window fetches
-  // details only for the visible range.
-  const { data: ids = [] } = usePhotoIds(query);
-  const win = usePhotoWindow(query);
+  // Windowed data + lightbox + grid shortcuts (shared with the search view).
+  const browser = usePhotoBrowser(query);
+  const ids = browser.ids;
   const { data: albums = [] } = useAlbums();
   useLibraryStats();
 
   const { importFolders } = useScanControls();
-  const [index, setIndex] = useState<number | null>(null);
-  useGlobalShortcuts(ids, { onOpen: setIndex, enabled: index === null });
 
   const filtered = isFiltered(query);
-  const loading = win.isLoading && ids.length === 0;
+  const loading = browser.windowLoading && ids.length === 0;
 
   return (
     <div className="flex h-full flex-col">
@@ -89,22 +85,11 @@ export function LibraryPage() {
         )
       ) : (
         <div className="min-h-0 flex-1">
-          <PhotoGrid
-            ids={ids}
-            getPhoto={win.getPhoto}
-            onOpen={setIndex}
-            onVisibleRangeChange={win.setRange}
-          />
+          <PhotoGrid {...browser.grid} />
         </div>
       )}
 
-      <Lightbox
-        ids={ids}
-        index={index}
-        onClose={() => setIndex(null)}
-        onIndexChange={setIndex}
-        getPhoto={win.getPhoto}
-      />
+      <Lightbox {...browser.lightbox} />
       <SelectionToolbar albums={albums} />
     </div>
   );

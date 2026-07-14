@@ -21,8 +21,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useAlbums } from "@/hooks/useAlbums";
-import { useGlobalShortcuts } from "@/hooks/useKeyboard";
-import { usePhotoIds, usePhotoWindow } from "@/hooks/useWindowedPhotos";
+import { usePhotoBrowser } from "@/hooks/usePhotoBrowser";
 import { buildQuery } from "@/lib/query";
 import type { PhotoFilter, SortBy, SortDir } from "@/types";
 
@@ -84,14 +83,11 @@ export function SearchPage() {
     () => buildQuery({ filter, sortBy, sortDir }),
     [filter, sortBy, sortDir],
   );
-  // Windowed model, only active once the user has entered any search criteria.
-  const { data: ids = [], isLoading } = usePhotoIds(query, hasCriteria);
-  const win = usePhotoWindow(query, hasCriteria);
-
+  // Windowed data + lightbox + shortcuts, active only once criteria are entered.
+  const browser = usePhotoBrowser(query, hasCriteria);
+  const ids = browser.ids;
   const { data: albums = [] } = useAlbums();
-  const [index, setIndex] = useState<number | null>(null);
-  useGlobalShortcuts(ids, { onOpen: setIndex, enabled: index === null });
-  const total = win.total;
+  const total = browser.total;
 
   return (
     <div className="flex h-full flex-col">
@@ -187,7 +183,7 @@ export function SearchPage() {
             title={t("searchPage.prompt.title")}
             description={t("searchPage.prompt.description")}
           />
-        ) : isLoading ? (
+        ) : browser.idsLoading ? (
           <div className="grid grid-cols-6 gap-2.5 p-3">
             {Array.from({ length: 18 }).map((_, i) => (
               <Skeleton key={i} className="aspect-square rounded-lg" />
@@ -200,22 +196,11 @@ export function SearchPage() {
             description={t("searchPage.noMatches.description")}
           />
         ) : (
-          <PhotoGrid
-            ids={ids}
-            getPhoto={win.getPhoto}
-            onOpen={setIndex}
-            onVisibleRangeChange={win.setRange}
-          />
+          <PhotoGrid {...browser.grid} />
         )}
       </div>
 
-      <Lightbox
-        ids={ids}
-        index={index}
-        onClose={() => setIndex(null)}
-        onIndexChange={setIndex}
-        getPhoto={win.getPhoto}
-      />
+      <Lightbox {...browser.lightbox} />
       <SelectionToolbar albums={albums} />
     </div>
   );
