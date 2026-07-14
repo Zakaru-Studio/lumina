@@ -138,7 +138,14 @@ pub async fn set_place(
         let lat_e3 = (lat * 1000.0).round() as i64;
         let lon_e3 = (lon * 1000.0).round() as i64;
         let conn = state.db.get()?;
-        geocache::put(&conn, lat_e3, lon_e3, &lang, &place, now())
+        // All fields blank ⇒ the user cleared the label: drop any cached row so
+        // the spot resolves online again, rather than caching an empty "resolved"
+        // entry that would permanently suppress future lookups for this cell.
+        if place.city.is_none() && place.region.is_none() && place.country.is_none() {
+            geocache::delete(&conn, lat_e3, lon_e3, &lang)
+        } else {
+            geocache::put(&conn, lat_e3, lon_e3, &lang, &place, now())
+        }
     })
     .await
 }

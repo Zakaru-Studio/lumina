@@ -45,6 +45,17 @@ pub fn distinct_places(conn: &Connection) -> Result<Vec<String>> {
     Ok(rows)
 }
 
+/// Remove any cached place for a grid cell + language. Used when the user clears
+/// a custom label, so the coordinate can be resolved online again instead of
+/// serving a stale/empty entry.
+pub fn delete(conn: &Connection, lat_e3: i64, lon_e3: i64, lang: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM geocache WHERE lat_e3 = ?1 AND lon_e3 = ?2 AND lang = ?3",
+        params![lat_e3, lon_e3, lang],
+    )?;
+    Ok(())
+}
+
 /// Store (replacing any prior entry) a resolved place for a grid cell + language.
 pub fn put(
     conn: &Connection,

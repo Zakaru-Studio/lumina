@@ -75,6 +75,8 @@ export function useClearFaceData() {
     onSuccess: (status) => {
       qc.setQueryData(qk.faceStatus, status);
       qc.invalidateQueries({ queryKey: ["people"] });
+      // Per-photo face overlays are cached under ['faces', …] — drop them too.
+      qc.invalidateQueries({ queryKey: ["faces"] });
     },
   });
 }
@@ -141,7 +143,9 @@ export function useFaceEvents() {
           qc.invalidateQueries({ queryKey: ["people"] });
           qc.invalidateQueries({ queryKey: ["faces"] });
           qc.invalidateQueries({ queryKey: qk.faceStatus });
-          if (s.photosProcessed > 0) {
+          if (s.error) {
+            toast.error(t("people.indexError"), { description: s.error });
+          } else if (s.photosProcessed > 0) {
             toast.success(
               t("people.indexDone", { people: s.people, faces: s.facesDetected }),
             );

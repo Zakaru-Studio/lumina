@@ -583,6 +583,7 @@
     "mergeHint": "Choose the person to merge into. All faces will be grouped together.",
     "mergeNone": "No other people to merge into.",
     "indexDone": "Analysis done — {{people}} people, {{faces}} faces.",
+    "indexError": "Face analysis failed",
     "analyze": "Analyze",
     "analyzeTitle": "Analyzing faces",
     "analyzeMeta": "{{faces}} faces · {{people}} people",

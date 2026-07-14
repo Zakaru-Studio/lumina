@@ -583,6 +583,7 @@
     "mergeHint": "Choisissez la personne dans laquelle fusionner. Tous les visages seront regroupés.",
     "mergeNone": "Aucune autre personne à fusionner.",
     "indexDone": "Analyse terminée — {{people}} personnes, {{faces}} visages.",
+    "indexError": "Échec de l'analyse des visages",
     "analyze": "Analyser",
     "analyzeTitle": "Analyse des visages",
     "analyzeMeta": "{{faces}} visages · {{people}} personnes",

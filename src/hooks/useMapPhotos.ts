@@ -112,6 +112,8 @@ export function useSetPlace() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["place"] });
       qc.invalidateQueries({ queryKey: ["reverseGeocode"] });
+      // The distinct-places list powering the library filter must refresh too.
+      qc.invalidateQueries({ queryKey: qk.places });
     },
   });
 }

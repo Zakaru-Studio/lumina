@@ -151,6 +151,9 @@ pub struct FaceSummary {
     pub people: u64,
     pub failed: u64,
     pub duration_ms: u128,
+    /// Set when the run aborted before completing (e.g. model download/load
+    /// failed); `None` on a normal finish.
+    pub error: Option<String>,
 }
 
 /// Emit an event, logging (but never propagating) transport failures — a

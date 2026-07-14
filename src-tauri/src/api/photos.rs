@@ -120,6 +120,28 @@ pub async fn set_location(
     lat: Option<f64>,
     lon: Option<f64>,
 ) -> Result<()> {
+    // Latitude and longitude must move together — both set (to place a pin) or
+    // both cleared (to remove it), and in range — never a half-set pair that
+    // would persist an inconsistent coordinate.
+    match (lat, lon) {
+        (Some(la), Some(lo)) => {
+            let in_range = la.is_finite()
+                && lo.is_finite()
+                && (-90.0..=90.0).contains(&la)
+                && (-180.0..=180.0).contains(&lo);
+            if !in_range {
+                return Err(crate::core::error::Error::Invalid(
+                    "latitude/longitude out of range".into(),
+                ));
+            }
+        }
+        (None, None) => {}
+        _ => {
+            return Err(crate::core::error::Error::Invalid(
+                "latitude and longitude must be set together".into(),
+            ));
+        }
+    }
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;

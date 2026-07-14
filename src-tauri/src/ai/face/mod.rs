@@ -178,13 +178,17 @@ impl FaceManager {
     /// Ensure the models are downloaded and the engine is loaded (cached).
     /// Blocking; may download ~37 MB on first call.
     pub fn ensure_engine(&self) -> Result<Arc<FaceEngine>> {
-        if let Some(engine) = self.engine.lock().as_ref() {
+        // Hold the lock across the (possibly slow) download + load so two
+        // concurrent callers can't both fetch ~37 MB and load the engine twice;
+        // the second waits, then observes the cached engine.
+        let mut guard = self.engine.lock();
+        if let Some(engine) = guard.as_ref() {
             return Ok(Arc::clone(engine));
         }
         let paths = models::ensure_models(&self.models_dir())?;
         info!("loading face models");
         let engine = Arc::new(FaceEngine::load(&paths)?);
-        *self.engine.lock() = Some(Arc::clone(&engine));
+        *guard = Some(Arc::clone(&engine));
         Ok(engine)
     }
 
@@ -220,7 +224,8 @@ impl FaceManager {
                 }
                 Err(e) => {
                     warn!(error = %e, "face indexing failed");
-                    // Surface completion so the UI stops any spinner.
+                    // Surface completion (so the UI stops any spinner) *and* the
+                    // reason, so the failure isn't silent.
                     events::emit(
                         &this.app,
                         events::names::FACE_DONE,
@@ -230,6 +235,7 @@ impl FaceManager {
                             people: 0,
                             failed: 0,
                             duration_ms: 0,
+                            error: Some(e.to_string()),
                         },
                     );
                 }
@@ -270,9 +276,19 @@ impl FaceManager {
                 },
                 failed: 0,
                 duration_ms: started.elapsed().as_millis(),
+                error: None,
             });
         }
         info!(total, "starting face indexing pass");
+
+        // Opening progress event so the UI shows the indicator right away —
+        // otherwise the first real update only lands after PROGRESS_EVERY photos,
+        // and a run shorter than that would never appear to be running.
+        events::emit(
+            &self.app,
+            events::names::FACE_PROGRESS,
+            FaceProgress { processed: 0, total, faces: 0, people: 0, current: None },
+        );
 
         let counters = Arc::new(Counters::default());
         let (tx, rx) = mpsc::channel::<WorkerMsg>();
@@ -312,6 +328,7 @@ impl FaceManager {
             people,
             failed: counters.failed.load(Ordering::Relaxed),
             duration_ms: started.elapsed().as_millis(),
+            error: None,
         })
     }
 

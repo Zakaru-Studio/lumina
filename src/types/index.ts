@@ -246,6 +246,8 @@ export interface FaceSummary {
   people: number;
   failed: number;
   durationMs: number;
+  /** Set when the run aborted before completing; null on a normal finish. */
+  error: string | null;
 }
 
 // --- Query contract ---

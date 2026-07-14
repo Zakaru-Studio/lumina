@@ -167,18 +167,34 @@ pub fn assign_face(
     Ok(())
 }
 
-/// Refresh a person's denormalized face count (and clear cover if now empty).
-pub fn refresh_person_count(conn: &Connection, person_id: &str, now: i64) -> Result<i64> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM faces WHERE person_id = ?1",
+/// Ensure a person's cover points at one of *their own* faces. Repairs a cover
+/// left dangling after its face was reassigned to someone else, and gives a
+/// user-created or merged cluster its first cover. Picks the highest-confidence
+/// face (newest as tiebreak); clears the cover to NULL when the person has no
+/// faces left. No-op when the current cover is already valid.
+fn ensure_person_cover(conn: &Connection, person_id: &str, now: i64) -> Result<()> {
+    let valid: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM persons pr JOIN faces f ON f.id = pr.cover_face_id \
+         WHERE pr.id = ?1 AND f.person_id = ?1)",
         params![person_id],
         |r| r.get(0),
     )?;
+    if valid {
+        return Ok(());
+    }
+    let face_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM faces WHERE person_id = ?1 \
+             ORDER BY COALESCE(detect_score, 0) DESC, created_at DESC LIMIT 1",
+            params![person_id],
+            |r| r.get(0),
+        )
+        .optional()?;
     conn.execute(
-        "UPDATE persons SET face_count = ?2, updated_at = ?3 WHERE id = ?1",
-        params![person_id, count, now],
+        "UPDATE persons SET cover_face_id = ?2, updated_at = ?3 WHERE id = ?1",
+        params![person_id, face_id, now],
     )?;
-    Ok(count)
+    Ok(())
 }
 
 /// Point a person's cover at a specific face.
@@ -398,6 +414,8 @@ pub fn merge_people(conn: &Connection, sources: &[String], into: &str, now: i64)
         "UPDATE persons SET face_count = ?2, updated_at = ?3 WHERE id = ?1",
         params![into, count, now],
     )?;
+    // The survivor may have absorbed faces without a cover of its own.
+    ensure_person_cover(&tx, into, now)?;
     tx.commit()?;
     Ok(())
 }
@@ -446,6 +464,9 @@ pub fn assign_faces(
             "UPDATE persons SET face_count = ?2, updated_at = ?3 WHERE id = ?1",
             params![pid, count, now],
         )?;
+        // A reassignment may have moved this person's cover face away (or given a
+        // user-created cluster its first faces) — repair the cover.
+        ensure_person_cover(&tx, &pid, now)?;
     }
     tx.commit()?;
     Ok(())
