@@ -49,7 +49,11 @@ function fail(msg) {
 
 /** Run a command, inheriting stdio; throws (caught → fail) on non-zero exit. */
 function run(cmd, args, opts = {}) {
-  const res = spawnSync(cmd, args, { stdio: "inherit", shell: true, cwd: ROOT, ...opts });
+  // `shell: true` hands the joined command to the platform shell, which re-parses
+  // on whitespace — so any arg containing spaces (a commit message, release
+  // notes) must be quoted or it splits into multiple tokens.
+  const quoted = args.map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a));
+  const res = spawnSync(cmd, quoted, { stdio: "inherit", shell: true, cwd: ROOT, ...opts });
   if (res.status !== 0) throw new Error(`${cmd} ${args.join(" ")} exited with ${res.status}`);
 }
 /** Run a command and capture trimmed stdout. */
@@ -198,9 +202,12 @@ async function main() {
   const nsisDir = join(SRC_TAURI, "target", "release", "bundle", "nsis");
   if (!existsSync(nsisDir)) fail(`NSIS output directory missing: ${nsisDir}`);
   const files = readdirSync(nsisDir);
-  const setupExe = files.find((f) => f.endsWith("-setup.exe"));
-  const setupSig = files.find((f) => f.endsWith("-setup.exe.sig"));
-  if (!setupExe) fail("Could not find the *-setup.exe installer in the NSIS output.");
+  // Match THIS version's installer specifically — stale artifacts from earlier
+  // builds can linger in the bundle dir, and a bare `-setup.exe` match would
+  // silently pick the wrong (older) one.
+  const setupExe = files.find((f) => f.includes(`_${version}_`) && f.endsWith("-setup.exe"));
+  const setupSig = setupExe ? files.find((f) => f === `${setupExe}.sig`) : undefined;
+  if (!setupExe) fail(`Could not find Lumina_${version}_*-setup.exe in the NSIS output.`);
   if (!setupSig) {
     fail("Could not find the *-setup.exe.sig signature. Is createUpdaterArtifacts enabled?");
   }
