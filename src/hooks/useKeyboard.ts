@@ -14,7 +14,7 @@
  * confirmation to choose between removing from the library and deleting the
  * files from disk — nothing is deleted without that choice.
  */
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
 import { useSetFavorite, useSetRating } from "@/hooks/usePhotoMutations";
 import { useDeleteDialog } from "@/stores/deleteDialogStore";
@@ -67,6 +67,14 @@ export function useGlobalShortcuts(order: string[], opts: GridShortcutOptions = 
   const setRating = useSetRating();
   const setFavorite = useSetFavorite();
 
+  // O(1) id → index lookups for cursor/range math, instead of `indexOf` on a
+  // possibly tens-of-thousands-long id list on every arrow keypress.
+  const orderIndex = useMemo(() => {
+    const m = new Map<string, number>();
+    order.forEach((id, i) => m.set(id, i));
+    return m;
+  }, [order]);
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -110,7 +118,7 @@ export function useGlobalShortcuts(order: string[], opts: GridShortcutOptions = 
         if (order.length === 0) return;
         e.preventDefault();
         const st = useSelectionStore.getState();
-        const cur = st.anchor ? order.indexOf(st.anchor) : -1;
+        const cur = st.anchor ? orderIndex.get(st.anchor) ?? -1 : -1;
         const next =
           e.key === "ArrowLeft"
             ? Math.max(0, (cur < 0 ? 0 : cur) - 1)

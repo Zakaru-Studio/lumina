@@ -1,4 +1,5 @@
 /** Data hooks for the map view: geolocated points and on-demand detail. */
+import { useMemo } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 
 import * as api from "@/lib/api";
@@ -31,9 +32,15 @@ export function useClusterPhotos(ids: string[]): Photo[] {
       staleTime: 60_000,
     })),
   });
-  const byId = new Map<string, Photo>();
-  for (const r of results) {
-    if (r.data) byId.set(r.data.id, r.data);
-  }
-  return ids.map((id) => byId.get(id)).filter((p): p is Photo => Boolean(p));
+  // Memoised so an unchanged cluster returns the SAME array reference across
+  // renders — otherwise the derived `photoIds` and the Lightbox props would be
+  // new every render. React Query structural-shares `results`, so this only
+  // recomputes when a detail actually resolves/changes.
+  return useMemo(() => {
+    const byId = new Map<string, Photo>();
+    for (const r of results) {
+      if (r.data) byId.set(r.data.id, r.data);
+    }
+    return ids.map((id) => byId.get(id)).filter((p): p is Photo => Boolean(p));
+  }, [results, ids]);
 }

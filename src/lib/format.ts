@@ -1,18 +1,48 @@
 /** Presentation helpers for formatting metadata (pure, no side effects). */
 import { format, fromUnixTime } from "date-fns";
-import { enUS, fr } from "date-fns/locale";
+import { enUS } from "date-fns/locale";
 import type { Locale } from "date-fns";
 
 import i18n from "@/i18n";
 import type { Photo } from "@/types";
 
 /**
+ * date-fns locales. `enUS` is the synchronous fallback baked into the main
+ * bundle; every other locale is code-split and preloaded on demand so its bytes
+ * (and date-fns' full locale data) stay out of the initial parse.
+ */
+const localeLoaders: Record<string, () => Promise<Locale>> = {
+  fr: () => import("date-fns/locale/fr").then((m) => m.fr),
+};
+const loadedLocales: Record<string, Locale> = { en: enUS };
+
+/** Map an i18n language tag to a locale bucket (`fr-CA` → `fr`, etc.). */
+function localeKey(lang: string | undefined): string {
+  return lang?.startsWith("fr") ? "fr" : "en";
+}
+
+/** Preload (once) the date-fns locale for a language, so it's ready by the time
+ * a date is formatted. Called at startup and on every language change. */
+export function preloadDateLocale(lang: string | undefined = i18n.language): void {
+  const key = localeKey(lang);
+  if (loadedLocales[key] || !localeLoaders[key]) return;
+  void localeLoaders[key]!().then((locale) => {
+    loadedLocales[key] = locale;
+  });
+}
+
+// Keep the active language's locale warm: preload now and whenever it changes.
+preloadDateLocale();
+i18n.on("languageChanged", (lng: string) => preloadDateLocale(lng));
+
+/**
  * The date-fns locale matching the active UI language, so weekday/month names in
  * formatted dates are localized (e.g. "lundi 3 mars 2025" in French). Read from
- * the i18next singleton at call time so it always reflects the current language.
+ * the i18next singleton at call time so it always reflects the current language;
+ * falls back to English until a code-split locale has finished preloading.
  */
 export function dateLocale(): Locale {
-  return i18n.language?.startsWith("fr") ? fr : enUS;
+  return loadedLocales[localeKey(i18n.language)] ?? enUS;
 }
 
 /** Human-readable file size. */

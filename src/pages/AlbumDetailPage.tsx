@@ -69,6 +69,18 @@ export function AlbumDetailPage() {
 
   const [index, setIndex] = useState<number | null>(null);
   useGlobalShortcuts(ids, { onOpen: setIndex, enabled: index === null });
+
+  // Infinite-scroll trigger: prefetch the next page as the visible range nears
+  // the end. Memoised so PhotoGrid's range effect doesn't re-run every render.
+  const handleVisibleRange = useCallback(
+    (_start: number, end: number) => {
+      if (end >= ids.length - 24 && hasNextPage && !isFetchingNextPage) {
+        fetchNextPage();
+      }
+    },
+    [ids.length, hasNextPage, isFetchingNextPage, fetchNextPage],
+  );
+
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameName, setRenameName] = useState("");
 
@@ -228,11 +240,7 @@ export function AlbumDetailPage() {
             ids={ids}
             getPhoto={getPhoto}
             onOpen={setIndex}
-            onVisibleRangeChange={(_, end) => {
-              if (end >= ids.length - 24 && hasNextPage && !isFetchingNextPage) {
-                fetchNextPage();
-              }
-            }}
+            onVisibleRangeChange={handleVisibleRange}
           />
         )}
       </div>
