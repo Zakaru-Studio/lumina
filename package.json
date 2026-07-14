@@ -1,7 +1,7 @@
 {
   "name": "lumina",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Lumina — a fast, local-first modern photo library manager.",
   "license": "GPL-3.0-only",
