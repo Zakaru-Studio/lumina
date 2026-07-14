@@ -178,8 +178,7 @@ pub async fn list_duplicates(
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;
-        let q = query.sanitized();
-        photos::duplicates(&conn, q.offset, q.limit)
+        photos::duplicates(&conn, &query)
     })
     .await
 }

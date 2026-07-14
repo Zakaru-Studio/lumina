@@ -17,6 +17,11 @@ src-tauri/gen
 .env.release
 *.key
 
+# Plain-named local secret env files (updater signing password, SSH deploy key,
+# update-host credentials). Distinct from the dotted .env.release above. NEVER commit.
+env.release
+env.download
+
 # Editor
 .vscode/*
 !.vscode/extensions.json

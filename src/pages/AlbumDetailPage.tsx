@@ -8,6 +8,7 @@ import { DedupeButton } from "@/components/library/DedupeButton";
 import { Lightbox } from "@/components/library/Lightbox";
 import { PhotoGrid } from "@/components/library/PhotoGrid";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
+import { SortControl } from "@/components/library/SortControl";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,7 +32,7 @@ import { albumLabel } from "@/lib/albumLabel";
 import { buildQuery } from "@/lib/query";
 import { useAlbumContext } from "@/stores/albumContextStore";
 import { useAlbumDelete } from "@/stores/albumDeleteStore";
-import type { Photo } from "@/types";
+import type { Photo, PhotoQuery, SortBy, SortDir } from "@/types";
 
 /**
  * A single album's contents. Manual albums can be renamed or deleted inline;
@@ -44,7 +45,11 @@ export function AlbumDetailPage() {
   const navigate = useNavigate();
 
   const { data: album, isLoading: albumLoading } = useAlbum(id);
-  const query = useMemo(() => buildQuery(), []);
+  // Sort is user-controllable (like the library's filter bar); paging resets on
+  // every change. The filter stays default — smart albums drive it server-side.
+  const [query, setQuery] = useState<PhotoQuery>(() => buildQuery());
+  const patchSort = (patch: { sortBy?: SortBy; sortDir?: SortDir }): void =>
+    setQuery((q) => ({ ...q, ...patch, offset: 0 }));
   const {
     data,
     isLoading: photosLoading,
@@ -148,35 +153,36 @@ export function AlbumDetailPage() {
             </>
           )}
         </div>
-        {isDuplicates ? (
-          <div className="ml-auto">
-            <DedupeButton />
-          </div>
-        ) : null}
-        {isManual ? (
-          <div className="ml-auto flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("albumDetailPage.renameAlbum")}
-              onClick={() => {
-                setRenameName(album?.name ?? "");
-                setRenameOpen(true);
-              }}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={t("albumDetailPage.deleteAlbum")}
-              className="text-destructive hover:text-destructive"
-              onClick={onDelete}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : null}
+        <div className="ml-auto flex items-center gap-2">
+          {album && album.count > 0 ? (
+            <SortControl sortBy={query.sortBy} sortDir={query.sortDir} onChange={patchSort} />
+          ) : null}
+          {isDuplicates ? <DedupeButton /> : null}
+          {isManual ? (
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("albumDetailPage.renameAlbum")}
+                onClick={() => {
+                  setRenameName(album?.name ?? "");
+                  setRenameOpen(true);
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={t("albumDetailPage.deleteAlbum")}
+                className="text-destructive hover:text-destructive"
+                onClick={onDelete}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       {/* Sub-albums */}

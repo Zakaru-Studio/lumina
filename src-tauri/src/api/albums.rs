@@ -155,8 +155,7 @@ pub async fn album_photos(
                 // The "Duplicates" smart album needs a dedicated hash-grouped
                 // query rather than a simple filter.
                 if albums::preset_of(&album) == Some("duplicates") {
-                    let q = q.sanitized();
-                    return photos::duplicates(&conn, q.offset, q.limit);
+                    return photos::duplicates(&conn, &q);
                 }
                 if let Some(rule) = &album.rule {
                     q.filter = albums::resolve_smart_filter(rule, now());

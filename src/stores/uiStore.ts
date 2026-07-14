@@ -4,7 +4,7 @@
  */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import i18n, { normalizeLanguage, type Language } from "@/i18n";
+import i18n, { detectOsLanguage, normalizeLanguage, type Language } from "@/i18n";
 import type { Theme } from "@/types";
 
 /** Bounds for the library grid cell size (px), driven by Ctrl+wheel zoom. */
@@ -48,7 +48,9 @@ export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       theme: "dark",
-      language: "en",
+      // First-launch default follows the OS language (French for any francophone
+      // locale, English otherwise). A persisted choice overrides this on rehydrate.
+      language: detectOsLanguage(),
       sidebarCollapsed: false,
       collapsedAlbums: [],
       cellSize: DEFAULT_CELL,

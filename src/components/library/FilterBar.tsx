@@ -1,15 +1,9 @@
-import { ArrowDownWideNarrow, ArrowUpWideNarrow, Aperture, Heart, LayoutGrid } from "lucide-react";
+import { Aperture, Heart, LayoutGrid } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { StarRating } from "@/components/common/StarRating";
+import { SortControl } from "@/components/library/SortControl";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { useUiStore } from "@/stores/uiStore";
@@ -25,15 +19,6 @@ export interface FilterBarProps {
   /** Called with a fresh query on every change (offset reset to 0). */
   onChange: (q: PhotoQuery) => void;
 }
-
-/** Sortable columns paired with their i18n label keys. */
-const SORT_OPTIONS: { value: SortBy; labelKey: string }[] = [
-  { value: "takenAt", labelKey: "filters.sort.takenAt" },
-  { value: "importedAt", labelKey: "filters.sort.importedAt" },
-  { value: "filename", labelKey: "filters.sort.filename" },
-  { value: "rating", labelKey: "filters.sort.rating" },
-  { value: "fileSize", labelKey: "filters.sort.fileSize" },
-];
 
 /**
  * A compact, airy toolbar for sorting and filtering a photo listing. It is a
@@ -88,33 +73,7 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
   return (
     <div className="flex h-auto flex-wrap items-center gap-2 px-3 py-2">
       {/* Sort */}
-      <Select value={query.sortBy} onValueChange={(v) => patchSort({ sortBy: v as SortBy })}>
-        <SelectTrigger className="h-8 w-[9.5rem] border-transparent bg-transparent shadow-none hover:bg-accent">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {SORT_OPTIONS.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {t(opt.labelKey)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        aria-label={query.sortDir === "asc" ? t("filters.ascending") : t("filters.descending")}
-        title={query.sortDir === "asc" ? t("filters.ascending") : t("filters.descending")}
-        onClick={() => patchSort({ sortDir: query.sortDir === "asc" ? "desc" : "asc" })}
-      >
-        {query.sortDir === "asc" ? (
-          <ArrowUpWideNarrow className="h-4 w-4" />
-        ) : (
-          <ArrowDownWideNarrow className="h-4 w-4" />
-        )}
-      </Button>
+      <SortControl sortBy={query.sortBy} sortDir={query.sortDir} onChange={patchSort} />
 
       <div className="mx-1 h-5 w-px bg-border" />
 

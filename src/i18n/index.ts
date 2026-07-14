@@ -21,6 +21,21 @@ export function normalizeLanguage(value: string | null | undefined): Language {
     : "en";
 }
 
+/**
+ * Best-effort detection of the OS display language, from the WebView's reported
+ * locale (WebView2 mirrors the Windows user language here). Used *only* as the
+ * first-launch default — once the user has a persisted choice, that wins. Every
+ * French locale (fr, fr-FR, fr-CA, fr-BE, fr-CH, …) maps to French; anything
+ * else falls back to English.
+ */
+export function detectOsLanguage(): Language {
+  const primary =
+    typeof navigator !== "undefined"
+      ? navigator.languages?.[0] ?? navigator.language ?? ""
+      : "";
+  return primary.toLowerCase().startsWith("fr") ? "fr" : "en";
+}
+
 void i18n.use(initReactI18next).init({
   resources: {
     en: { translation: en },

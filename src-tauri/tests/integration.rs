@@ -2,7 +2,7 @@
 //! logic end-to-end against a temporary SQLite database.
 
 use lumina_lib::core::models::{MediaType, Photo, ThumbStatus};
-use lumina_lib::core::query::{PhotoFilter, PhotoQuery};
+use lumina_lib::core::query::{PhotoFilter, PhotoQuery, SortBy, SortDir};
 use lumina_lib::database::{albums, photos, tags, Database};
 
 /// Open a throwaway database in a temp dir with migrations applied.
@@ -226,6 +226,54 @@ fn get_album_reports_live_count() {
     albums::add_photos(&conn, &manual.id, &["id-3".into()], now).unwrap();
     let manual_get = albums::get(&conn, &manual.id, now).unwrap();
     assert_eq!(manual_get.count, 1, "get() manual count");
+}
+
+#[test]
+fn duplicates_listing_honors_query_sort() {
+    // The Duplicates view now sorts like the library. Two duplicate pairs with
+    // distinct file sizes must order by the requested key/direction, while the
+    // copies of each pair stay adjacent (hash tie-break).
+    let (_dir, db) = temp_db();
+    let conn = db.get().unwrap();
+
+    let make = |id: &str, hash: &str, size: i64| {
+        let mut p = sample_photo(id, &format!("/photos/{id}.jpg"), &format!("{id}.jpg"));
+        p.hash = Some(hash.into());
+        p.file_size = size;
+        photos::upsert(&conn, &p).unwrap();
+    };
+    make("a1", "aaa", 100);
+    make("a2", "aaa", 100);
+    make("b1", "bbb", 200);
+    make("b2", "bbb", 200);
+
+    let by_size = |dir: SortDir| {
+        let q = PhotoQuery {
+            sort_by: SortBy::FileSize,
+            sort_dir: dir,
+            ..PhotoQuery::default()
+        };
+        let page = photos::duplicates(&conn, &q).unwrap();
+        assert_eq!(page.total, 4);
+        page.items.iter().map(|p| p.file_size).collect::<Vec<_>>()
+    };
+
+    assert_eq!(by_size(SortDir::Asc), vec![100, 100, 200, 200], "ascending by size");
+    assert_eq!(by_size(SortDir::Desc), vec![200, 200, 100, 100], "descending by size");
+
+    // Copies of each hash group remain contiguous regardless of direction.
+    let q = PhotoQuery {
+        sort_by: SortBy::FileSize,
+        sort_dir: SortDir::Asc,
+        ..PhotoQuery::default()
+    };
+    let hashes = photos::duplicates(&conn, &q)
+        .unwrap()
+        .items
+        .iter()
+        .map(|p| p.hash.clone().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(hashes, vec!["aaa", "aaa", "bbb", "bbb"]);
 }
 
 #[test]

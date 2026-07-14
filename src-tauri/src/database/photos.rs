@@ -273,30 +273,32 @@ fn build_where(filter: &PhotoFilter) -> (String, Vec<Value>) {
     (format!("WHERE {}", clauses.join(" AND ")), params)
 }
 
-fn order_clause(sort_by: SortBy, dir: SortDir) -> &'static str {
-    let d = match dir {
+/// SQL expression for a sort field, qualified with the `photos` table so it can
+/// be reused in joined/grouped queries.
+fn sort_column(sort_by: SortBy) -> &'static str {
+    match sort_by {
+        SortBy::TakenAt => "photos.taken_at",
+        SortBy::ImportedAt => "photos.imported_at",
+        SortBy::Filename => "photos.filename",
+        SortBy::Rating => "photos.rating",
+        SortBy::FileSize => "photos.file_size",
+        SortBy::Timeline => "COALESCE(photos.taken_at, photos.imported_at)",
+    }
+}
+
+/// The `ASC`/`DESC` keyword for a sort direction.
+fn dir_sql(dir: SortDir) -> &'static str {
+    match dir {
         SortDir::Asc => "ASC",
         SortDir::Desc => "DESC",
-    };
-    // Deterministic tie-break on id keeps pagination stable.
-    match (sort_by, d) {
-        (SortBy::TakenAt, "ASC") => "ORDER BY photos.taken_at ASC, photos.id ASC",
-        (SortBy::TakenAt, _) => "ORDER BY photos.taken_at DESC, photos.id DESC",
-        (SortBy::ImportedAt, "ASC") => "ORDER BY photos.imported_at ASC, photos.id ASC",
-        (SortBy::ImportedAt, _) => "ORDER BY photos.imported_at DESC, photos.id DESC",
-        (SortBy::Filename, "ASC") => "ORDER BY photos.filename ASC, photos.id ASC",
-        (SortBy::Filename, _) => "ORDER BY photos.filename DESC, photos.id DESC",
-        (SortBy::Rating, "ASC") => "ORDER BY photos.rating ASC, photos.id ASC",
-        (SortBy::Rating, _) => "ORDER BY photos.rating DESC, photos.id DESC",
-        (SortBy::FileSize, "ASC") => "ORDER BY photos.file_size ASC, photos.id ASC",
-        (SortBy::FileSize, _) => "ORDER BY photos.file_size DESC, photos.id DESC",
-        (SortBy::Timeline, "ASC") => {
-            "ORDER BY COALESCE(photos.taken_at, photos.imported_at) ASC, photos.id ASC"
-        }
-        (SortBy::Timeline, _) => {
-            "ORDER BY COALESCE(photos.taken_at, photos.imported_at) DESC, photos.id DESC"
-        }
     }
+}
+
+fn order_clause(sort_by: SortBy, dir: SortDir) -> String {
+    let col = sort_column(sort_by);
+    let d = dir_sql(dir);
+    // Deterministic tie-break on id keeps pagination stable.
+    format!("ORDER BY {col} {d}, photos.id {d}")
 }
 
 /// Count live photos matching a filter.
@@ -592,15 +594,21 @@ pub fn duplicates_total(conn: &Connection) -> Result<i64> {
     Ok(conn.query_row(&sql, [], |r| r.get(0))?)
 }
 
-/// List a page of duplicate photos, grouped by hash so copies sit together.
-pub fn duplicates(conn: &Connection, offset: i64, limit: i64) -> Result<Page<Photo>> {
+/// List a page of duplicate photos honoring the query's sort. A secondary
+/// `hash` key keeps exact copies adjacent: for content-derived sort fields
+/// (taken date, file size) the copies of each set share the primary value, so
+/// they still sit together as a group.
+pub fn duplicates(conn: &Connection, query: &PhotoQuery) -> Result<Page<Photo>> {
+    let q = query.clone().sanitized();
     let total = duplicates_total(conn)?;
+    let col = sort_column(q.sort_by);
+    let d = dir_sql(q.sort_dir);
     let sql = format!(
         "SELECT {COLUMNS} FROM photos WHERE {DUP_PREDICATE} \
-         ORDER BY hash, taken_at DESC, id LIMIT ?1 OFFSET ?2"
+         ORDER BY {col} {d}, photos.hash, photos.id {d} LIMIT ?1 OFFSET ?2"
     );
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(params![limit.clamp(1, 1000), offset.max(0)], |r| map_row(r))?;
+    let rows = stmt.query_map(params![q.limit, q.offset], |r| map_row(r))?;
     let mut items = Vec::new();
     for r in rows {
         items.push(r?);
@@ -608,8 +616,8 @@ pub fn duplicates(conn: &Connection, offset: i64, limit: i64) -> Result<Page<Pho
     Ok(Page {
         items,
         total,
-        offset,
-        limit,
+        offset: q.offset,
+        limit: q.limit,
     })
 }
 
