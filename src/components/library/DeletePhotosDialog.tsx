@@ -30,7 +30,7 @@ import { useUiStore } from "@/stores/uiStore";
  */
 export function DeletePhotosDialog() {
   const { t } = useTranslation();
-  const ids = useDeleteDialog((s) => s.ids);
+  const ids = useDeleteDialog((s) => s.payload);
   const close = useDeleteDialog((s) => s.close);
   const clearSelection = useSelectionStore((s) => s.clear);
   const preference = useUiStore((s) => s.deletePreference);

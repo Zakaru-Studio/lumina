@@ -1,22 +1,21 @@
-import { Suspense, lazy, useEffect } from "react";
+import { lazy, useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { UpdatePrompt } from "@/components/updater/UpdatePrompt";
 import { dismissSplashscreen } from "@/lib/splash";
-import { Skeleton } from "@/components/ui/skeleton";
 import { LibraryPage } from "@/pages/LibraryPage";
-import { TimelinePage } from "@/pages/TimelinePage";
-import { SearchPage } from "@/pages/SearchPage";
 
-// The map pulls in bundled world-geometry vectors + d3-geo; load it on demand
-// so those bytes never weigh down the initial (non-map) app start.
-const MapPage = lazy(() =>
-  import("@/pages/MapPage").then((m) => ({ default: m.MapPage })),
-);
-import { AlbumsPage } from "@/pages/AlbumsPage";
-import { AlbumDetailPage } from "@/pages/AlbumDetailPage";
-import { SettingsPage } from "@/pages/SettingsPage";
+// Only the initial Library route ships in the main bundle. Every other page is
+// code-split and loaded on demand — including the map's bundled world-geometry
+// vectors + d3-geo. A shared <Suspense> lives in AppShell around the routed
+// <Outlet>, so no per-route boilerplate is needed here.
+const TimelinePage = lazy(() => import("@/pages/TimelinePage").then((m) => ({ default: m.TimelinePage })));
+const SearchPage = lazy(() => import("@/pages/SearchPage").then((m) => ({ default: m.SearchPage })));
+const MapPage = lazy(() => import("@/pages/MapPage").then((m) => ({ default: m.MapPage })));
+const AlbumsPage = lazy(() => import("@/pages/AlbumsPage").then((m) => ({ default: m.AlbumsPage })));
+const AlbumDetailPage = lazy(() => import("@/pages/AlbumDetailPage").then((m) => ({ default: m.AlbumDetailPage })));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
 /**
  * Route table. All pages render inside the persistent {@link AppShell}, which
@@ -37,14 +36,7 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<LibraryPage />} />
           <Route path="timeline" element={<TimelinePage />} />
-          <Route
-            path="map"
-            element={
-              <Suspense fallback={<div className="h-full p-6"><Skeleton className="h-full w-full rounded-2xl" /></div>}>
-                <MapPage />
-              </Suspense>
-            }
-          />
+          <Route path="map" element={<MapPage />} />
           <Route path="search" element={<SearchPage />} />
           <Route path="albums" element={<AlbumsPage />} />
           <Route path="albums/:albumId" element={<AlbumDetailPage />} />

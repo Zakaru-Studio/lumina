@@ -33,7 +33,7 @@ function splitExtension(filename: string): { base: string; ext: string } {
 export function RenamePhotoDialog() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const target = useRenamePhoto((s) => s.target);
+  const target = useRenamePhoto((s) => s.payload);
   const close = useRenamePhoto((s) => s.close);
 
   const [name, setName] = useState("");

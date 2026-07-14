@@ -3,8 +3,10 @@
  * backed by an on-disk folder (`album.folderPath != null`), where deleting the
  * album sends the real folder and its contents to the Recycle Bin. Virtual
  * albums don't use this: they keep their lighter, existing confirmation.
+ *
+ * `payload` holds the mirror album pending deletion (`null` when closed).
  */
-import { create } from "zustand";
+import { createDialogStore } from "@/stores/createDialogStore";
 
 /** The mirror album pending deletion, plus what to run once it's gone. */
 export interface AlbumDeleteTarget {
@@ -14,14 +16,4 @@ export interface AlbumDeleteTarget {
   onDeleted?: () => void;
 }
 
-interface AlbumDeleteState {
-  target: AlbumDeleteTarget | null;
-  open: (target: AlbumDeleteTarget) => void;
-  close: () => void;
-}
-
-export const useAlbumDelete = create<AlbumDeleteState>((set) => ({
-  target: null,
-  open: (target) => set({ target }),
-  close: () => set({ target: null }),
-}));
+export const useAlbumDelete = createDialogStore<AlbumDeleteTarget>();

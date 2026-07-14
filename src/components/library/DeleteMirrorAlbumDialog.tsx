@@ -1,15 +1,7 @@
 import { AlertTriangle } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { useDeleteAlbum } from "@/hooks/useAlbums";
 import { useAlbumDelete } from "@/stores/albumDeleteStore";
 
@@ -18,11 +10,11 @@ import { useAlbumDelete } from "@/stores/albumDeleteStore";
  * all of its contents are moved to the Recycle Bin. Store-driven so every album
  * delete entry point (sidebar tree, albums grid, album detail) can funnel
  * mirror-album deletions through the same explicit warning. Mounted once in the
- * app shell. (`@/components/ui` ships no AlertDialog, so this uses Dialog.)
+ * app shell.
  */
 export function DeleteMirrorAlbumDialog() {
   const { t } = useTranslation();
-  const target = useAlbumDelete((s) => s.target);
+  const target = useAlbumDelete((s) => s.payload);
   const close = useAlbumDelete((s) => s.close);
   const deleteAlbum = useDeleteAlbum();
 
@@ -38,30 +30,17 @@ export function DeleteMirrorAlbumDialog() {
   };
 
   return (
-    <Dialog open={target !== null} onOpenChange={(o) => !o && close()}>
-      <DialogContent>
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
-            <DialogTitle>{t("mirrorDelete.title")}</DialogTitle>
-          </div>
-          <DialogDescription>
-            {t("mirrorDelete.description", { name: target?.name ?? "" })}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="ghost" onClick={close}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={confirm}
-            disabled={deleteAlbum.isPending}
-          >
-            {t("mirrorDelete.confirm")}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <ConfirmDialog
+      open={target !== null}
+      onOpenChange={(o) => !o && close()}
+      icon={<AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />}
+      title={t("mirrorDelete.title")}
+      description={t("mirrorDelete.description", { name: target?.name ?? "" })}
+      confirmLabel={t("mirrorDelete.confirm")}
+      cancelLabel={t("common.cancel")}
+      variant="destructive"
+      isPending={deleteAlbum.isPending}
+      onConfirm={confirm}
+    />
   );
 }

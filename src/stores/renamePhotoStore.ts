@@ -2,8 +2,10 @@
  * Drives the shared "rename media" dialog. Every entry point (photo cell context
  * menu, lightbox) opens this with the target photo instead of renaming directly,
  * so the same small dialog is presented consistently in one place.
+ *
+ * `payload` holds the photo pending a rename (`null` when closed).
  */
-import { create } from "zustand";
+import { createDialogStore } from "@/stores/createDialogStore";
 
 /** The minimal photo identity the rename dialog needs. */
 export interface RenameTarget {
@@ -11,15 +13,4 @@ export interface RenameTarget {
   filename: string;
 }
 
-interface RenamePhotoState {
-  /** Photo pending a rename, or `null` when the dialog is closed. */
-  target: RenameTarget | null;
-  open: (target: RenameTarget) => void;
-  close: () => void;
-}
-
-export const useRenamePhoto = create<RenamePhotoState>((set) => ({
-  target: null,
-  open: (target) => set({ target }),
-  close: () => set({ target: null }),
-}));
+export const useRenamePhoto = createDialogStore<RenameTarget>();

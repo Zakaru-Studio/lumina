@@ -38,5 +38,20 @@ export default defineConfig(async () => ({
     target: "es2021",
     minify: "esbuild",
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        // Split the big, rarely-changing vendor libraries into their own
+        // cacheable chunks so an app-code change doesn't re-download them, and
+        // the initial route parses less JS. Route-level code-splitting (see
+        // App.tsx) does the heavier lifting.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("react-dom") || id.includes("/react/") || id.includes("react-router"))
+            return "react";
+          if (id.includes("@radix-ui")) return "radix";
+          if (id.includes("@tanstack")) return "query";
+        },
+      },
+    },
   },
 }));

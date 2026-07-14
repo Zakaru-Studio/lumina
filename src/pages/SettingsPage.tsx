@@ -19,7 +19,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -31,6 +30,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Row, Section, Stat } from "@/components/common/SettingsLayout";
 import { useAiStatus, useConfig, useUpdateConfig } from "@/hooks/useSettings";
 import { useLibraryStats } from "@/hooks/usePhotos";
 import { useScanControls, useWatchedFolders } from "@/hooks/useScan";
@@ -40,50 +40,6 @@ import { useBackupDevice } from "@/stores/backupDeviceStore";
 import { useUiStore, type DeletePreference } from "@/stores/uiStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { AppConfig, Theme } from "@/types";
-
-/** A titled settings section rendered as a borderless card. */
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card className="border-0 bg-card">
-      <CardHeader>
-        <CardTitle className="text-base">{title}</CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
-      </CardHeader>
-      <CardContent className="space-y-5">{children}</CardContent>
-    </Card>
-  );
-}
-
-/** A single label + control row. */
-function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <Label className="text-sm text-foreground">{label}</Label>
-        {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  );
-}
-
-/** A compact library statistic. */
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-muted/50 p-3">
-      <p className="text-xl font-semibold text-foreground">{value.toLocaleString()}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
-    </div>
-  );
-}
 
 /**
  * Application settings: appearance, thumbnails, performance, watched folders,

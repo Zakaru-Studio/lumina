@@ -3,19 +3,9 @@
  * point (selection toolbar, cell context menu, keyboard shortcut) opens this
  * with the target ids instead of deleting directly, so the "remove from library
  * vs delete from disk" choice is presented consistently in one place.
+ *
+ * `payload` holds the ids pending a delete decision (`null` when closed).
  */
-import { create } from "zustand";
+import { createDialogStore } from "@/stores/createDialogStore";
 
-interface DeleteDialogState {
-  /** Ids pending a delete decision, or `null` when the dialog is closed. */
-  ids: string[] | null;
-  /** Open the dialog for `ids` (no-op on an empty list). */
-  open: (ids: string[]) => void;
-  close: () => void;
-}
-
-export const useDeleteDialog = create<DeleteDialogState>((set) => ({
-  ids: null,
-  open: (ids) => set({ ids: ids.length > 0 ? ids : null }),
-  close: () => set({ ids: null }),
-}));
+export const useDeleteDialog = createDialogStore<string[]>((ids) => ids.length === 0);

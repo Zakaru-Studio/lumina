@@ -86,7 +86,7 @@ export function ImportAlbumsDialog() {
   const { t } = useTranslation();
   const qc = useQueryClient();
   const { data: config } = useConfig();
-  const paths = useImportAlbumsDialog((s) => s.paths);
+  const paths = useImportAlbumsDialog((s) => s.payload);
   const close = useImportAlbumsDialog((s) => s.close);
 
   const [rootNames, setRootNames] = useState<string[]>([]);
