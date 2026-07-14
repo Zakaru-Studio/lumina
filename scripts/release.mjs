@@ -18,6 +18,8 @@
  *      code repo.
  *   6. Uploads the installer + latest.json to the self-hosted update host over
  *      SSH (key auth) so installed apps can fetch them publicly.
+ *   7. Best-effort: also publishes a GitHub Release with the installer attached
+ *      (skipped, never failed, when gh is unavailable/unauthenticated).
  *
  * Secrets come from a gitignored `.env.release` at the repo root:
  *   LUMINA_SIGNING_KEY_PATH=<path to the updater private key>
@@ -197,6 +199,14 @@ async function main() {
   if (!existsSync(sshKey)) fail(`SSH deploy key not found at LUMINA_SSH_KEY=${sshKey}.`);
   info(`update host ${baseUrl} (scp to ${sshUser}@${sshHost})`);
 
+  // A GitHub Release is also published, in addition to self-hosting. Best-effort:
+  // the repo slug comes from the git remote, and publishing is skipped (never
+  // failed) when gh is unavailable/unauthenticated.
+  const repo = resolveRepoSlug();
+  const ghReady =
+    spawnSync("gh", ["auth", "status"], { shell: true, cwd: ROOT, stdio: "ignore" }).status === 0;
+  info(ghReady ? `github ${repo} (release will be published)` : `github ${repo} (gh not authed → release skipped)`);
+
   // --- Version bump --------------------------------------------------------
   step(`Bumping version to ${version}`);
   bumpJson("package.json", version, [["version"]]);
@@ -290,6 +300,30 @@ async function main() {
     { stdio: "inherit", cwd: ROOT },
   );
   if (scp.status !== 0) fail("scp upload to the update host failed.");
+
+  // --- GitHub Release (best-effort, in addition to self-hosting) -----------
+  // Publishes the installer on the repo's Releases page for visibility / manual
+  // download. The updater still uses the self-hosted latest.json above; a
+  // failure here never aborts the release (core steps already succeeded).
+  step("Creating GitHub Release");
+  if (ghReady) {
+    try {
+      const notesArgs = notes ? ["--notes", notes] : ["--generate-notes"];
+      run("gh", [
+        "release", "create", tag,
+        setupPath,
+        join(nsisDir, setupSig),
+        "--repo", repo,
+        "--title", `Lumina ${version}`,
+        ...notesArgs,
+      ]);
+      info(`published ${tag} to github.com/${repo}/releases`);
+    } catch (e) {
+      info(`skipped GitHub Release (${e.message}); self-host upload already succeeded`);
+    }
+  } else {
+    info("skipped GitHub Release (gh not authenticated — run `gh auth login` to enable)");
+  }
 
   console.log(
     `\n${c.green("✔")} Released ${c.bold(tag)}. ` +
