@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderHeart,
+  FolderSync,
   Heart,
   Pencil,
   Sun,
@@ -40,6 +41,7 @@ import {
   type AlbumNode,
 } from "@/lib/albumTree";
 import { cn } from "@/lib/utils";
+import { useAlbumDelete } from "@/stores/albumDeleteStore";
 import { useUiStore } from "@/stores/uiStore";
 import type { Album } from "@/types";
 
@@ -222,7 +224,15 @@ export function AlbumTree({ albums }: { albums: Album[] }) {
           onStartRename={() => setEditingId(node.album.id)}
           onCommitRename={(name) => commitRename(node.album, name)}
           onCancelRename={() => setEditingId(null)}
-          onDelete={() => deleteAlbum.mutate(node.album.id)}
+          onDelete={() => {
+            // Deleting a mirror album trashes its real folder — gate that behind
+            // a strong confirmation. Virtual albums delete immediately as before.
+            if (node.album.folderPath != null) {
+              useAlbumDelete.getState().open({ id: node.album.id, name: node.album.name });
+            } else {
+              deleteAlbum.mutate(node.album.id);
+            }
+          }}
           onToggle={() => toggleCollapsed(node.album.id)}
           onDragStart={(e) => {
             e.dataTransfer.setData(ALBUM_MIME, node.album.id);
@@ -399,6 +409,12 @@ function AlbumRow({
           ) : (
             <span className="flex-1 truncate">{album.name}</span>
           )}
+          {album.folderPath != null ? (
+            <FolderSync
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              aria-label={t("shell.mirrorAlbum")}
+            />
+          ) : null}
           <span className="text-xs text-muted-foreground">{album.count}</span>
         </NavLink>
       </ContextMenuTrigger>

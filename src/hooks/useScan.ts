@@ -12,6 +12,8 @@ import {
   onThumbsRegenerated,
 } from "@/lib/events";
 import { qk } from "@/lib/query";
+import { useConfig } from "@/hooks/useSettings";
+import { useFolderSyncMode } from "@/stores/folderSyncModeStore";
 import { useImportAlbumsDialog } from "@/stores/importAlbumsDialogStore";
 import { useScanStore } from "@/stores/scanStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -83,15 +85,25 @@ export function useWatchedFolders() {
 
 export function useScanControls() {
   const qc = useQueryClient();
+  const { data: config } = useConfig();
   const invalidateFolders = () => qc.invalidateQueries({ queryKey: qk.watchedFolders });
 
   // Pick folders and hand off to the import dialog, which lets the user choose
   // whether to create albums from the folder tree or just import the media.
   // Folder registration + invalidation happen from the dialog's actions.
+  //
+  // On the very first import (folderSyncMode still unset) the folder-management
+  // choice modal is shown FIRST; picking a mode resumes into the import dialog.
   const importFolders = useMutation({
     mutationFn: () => api.pickFolders(),
     onSuccess: (paths) => {
-      if (paths.length > 0) useImportAlbumsDialog.getState().open(paths);
+      if (paths.length === 0) return;
+      const openImport = () => useImportAlbumsDialog.getState().open(paths);
+      if (config && config.folderSyncMode == null) {
+        useFolderSyncMode.getState().prompt(openImport);
+      } else {
+        openImport();
+      }
     },
   });
 

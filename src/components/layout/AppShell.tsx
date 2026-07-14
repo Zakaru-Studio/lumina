@@ -1,14 +1,19 @@
 import { Outlet } from "react-router-dom";
 
+import { BackupDeviceDialog } from "@/components/backup/BackupDeviceDialog";
 import { CommandPalette } from "@/components/command/CommandPalette";
 import { ImageEditor } from "@/components/editor/ImageEditor";
+import { DeleteMirrorAlbumDialog } from "@/components/library/DeleteMirrorAlbumDialog";
 import { DeletePhotosDialog } from "@/components/library/DeletePhotosDialog";
+import { FolderSyncModePrompt } from "@/components/library/FolderSyncModePrompt";
 import { ImportAlbumsDialog } from "@/components/library/ImportAlbumsDialog";
+import { RenamePhotoDialog } from "@/components/library/RenamePhotoDialog";
 import { ScanProgressBar } from "@/components/layout/ScanProgressBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useBackupEvents } from "@/hooks/useBackup";
 import { useScanEvents } from "@/hooks/useScan";
 import { useThemeSync } from "@/hooks/useSettings";
 import { useAppShortcuts } from "@/hooks/useKeyboard";
@@ -20,6 +25,7 @@ import { useAppShortcuts } from "@/hooks/useKeyboard";
  */
 export function AppShell() {
   useScanEvents();
+  useBackupEvents();
   useThemeSync();
   useAppShortcuts();
 
@@ -38,6 +44,10 @@ export function AppShell() {
         <ImageEditor />
         <DeletePhotosDialog />
         <ImportAlbumsDialog />
+        <FolderSyncModePrompt />
+        <RenamePhotoDialog />
+        <DeleteMirrorAlbumDialog />
+        <BackupDeviceDialog />
         <Toaster />
       </div>
     </TooltipProvider>

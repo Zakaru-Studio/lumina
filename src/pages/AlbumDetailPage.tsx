@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, FolderHeart, ImageIcon, Pencil, Trash2 } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
+import { DedupeButton } from "@/components/library/DedupeButton";
 import { Lightbox } from "@/components/library/Lightbox";
 import { PhotoGrid } from "@/components/library/PhotoGrid";
 import { SelectionToolbar } from "@/components/library/SelectionToolbar";
@@ -29,6 +30,7 @@ import { flattenPhotos } from "@/hooks/usePhotos";
 import { albumLabel } from "@/lib/albumLabel";
 import { buildQuery } from "@/lib/query";
 import { useAlbumContext } from "@/stores/albumContextStore";
+import { useAlbumDelete } from "@/stores/albumDeleteStore";
 import type { Photo } from "@/types";
 
 /**
@@ -66,6 +68,8 @@ export function AlbumDetailPage() {
   const [renameName, setRenameName] = useState("");
 
   const isManual = album?.kind === "manual";
+  const isDuplicates =
+    album?.kind === "smart" && (album.rule?.preset as string | undefined) === "duplicates";
   const childAlbums = useMemo(
     () => albums.filter((a) => a.kind === "manual" && a.parentId === id),
     [albums, id],
@@ -97,8 +101,17 @@ export function AlbumDetailPage() {
 
   const onDelete = () => {
     if (!album) return;
-    if (confirm(t("albumDetailPage.deleteConfirm", { name: album.name })))
+    // Mirror albums trash their real folder — route through the strong
+    // confirmation dialog. Virtual albums keep the lighter native confirm.
+    if (album.folderPath != null) {
+      useAlbumDelete.getState().open({
+        id: album.id,
+        name: album.name,
+        onDeleted: () => navigate("/albums"),
+      });
+    } else if (confirm(t("albumDetailPage.deleteConfirm", { name: album.name }))) {
       deleteAlbum.mutate(album.id, { onSuccess: () => navigate("/albums") });
+    }
   };
 
   return (
@@ -135,6 +148,11 @@ export function AlbumDetailPage() {
             </>
           )}
         </div>
+        {isDuplicates ? (
+          <div className="ml-auto">
+            <DedupeButton />
+          </div>
+        ) : null}
         {isManual ? (
           <div className="ml-auto flex items-center gap-1">
             <Button

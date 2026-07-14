@@ -100,6 +100,26 @@ impl ThumbStatus {
     }
 }
 
+/// One hash-identical set of duplicates, split into the copy to keep and the
+/// copies proposed for removal. See [`crate::database::photos::dedupe_plan`].
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DedupeGroup {
+    /// The copy chosen to survive (best metadata / cleanest name / oldest).
+    pub keep: Photo,
+    /// The redundant copies proposed for removal.
+    pub remove: Vec<Photo>,
+}
+
+/// A full "smart dedupe" proposal across the whole catalog: one group per set
+/// of identical files, plus the total number of copies that would be removed.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DedupePlan {
+    pub groups: Vec<DedupeGroup>,
+    pub total_remove: i64,
+}
+
 /// A user tag.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -129,6 +149,11 @@ pub struct Album {
     /// only; smart albums always keep this `None`.
     #[serde(default)]
     pub parent_id: Option<String>,
+    /// On-disk directory this album mirrors, when it belongs to a mirror root.
+    /// `None` for virtual albums (hand-made / non-mirror imports) and smart
+    /// albums. Album structural ops propagate to disk only when this is set.
+    #[serde(default)]
+    pub folder_path: Option<String>,
     #[serde(default)]
     pub count: i64,
 }
@@ -163,6 +188,10 @@ pub struct WatchedFolder {
     pub path: String,
     pub added_at: i64,
     pub active: bool,
+    /// When true, this root is a bidirectional mirror of its on-disk folder
+    /// tree (album ops propagate to disk; Explorer changes reconcile back).
+    #[serde(default)]
+    pub mirror: bool,
 }
 
 /// One day-bucket of the timeline view.

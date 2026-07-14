@@ -49,6 +49,7 @@ import {
 } from "@/hooks/useAlbums";
 import { albumLabel } from "@/lib/albumLabel";
 import { albumOptions } from "@/lib/albumTree";
+import { useAlbumDelete } from "@/stores/albumDeleteStore";
 import type { Album } from "@/types";
 
 /** Sentinel Select value for "no parent" (Radix Select forbids empty values). */
@@ -245,8 +246,17 @@ export function AlbumsPage() {
                             <DropdownMenuItem
                               className="text-destructive"
                               onSelect={() => {
-                                if (confirm(t("albumsPage.deleteConfirm", { name: album.name })))
+                                // Mirror albums trash their real folder — route
+                                // through the strong confirmation dialog.
+                                if (album.folderPath != null) {
+                                  useAlbumDelete
+                                    .getState()
+                                    .open({ id: album.id, name: album.name });
+                                } else if (
+                                  confirm(t("albumsPage.deleteConfirm", { name: album.name }))
+                                ) {
                                   deleteAlbum.mutate(album.id);
+                                }
                               }}
                             >
                               {t("common.delete")}

@@ -1,5 +1,5 @@
 import type { DragEvent, MouseEvent } from "react";
-import { Check, FolderMinus, FolderOpen, Heart, SlidersHorizontal, Star, Trash2 } from "lucide-react";
+import { Check, FolderMinus, FolderOpen, Heart, Pencil, SlidersHorizontal, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
@@ -20,8 +20,10 @@ import { useSetFavorite, useSetRating } from "@/hooks/usePhotoMutations";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAlbumContext } from "@/stores/albumContextStore";
+import { useDedupeExitStore } from "@/stores/dedupeExitStore";
 import { useDeleteDialog } from "@/stores/deleteDialogStore";
 import { useEditorStore } from "@/stores/editorStore";
+import { useRenamePhoto } from "@/stores/renamePhotoStore";
 import { useSelectionStore } from "@/stores/selectionStore";
 import type { Photo } from "@/types";
 
@@ -50,6 +52,8 @@ export interface PhotoCellProps {
 export function PhotoCell({ photo, selected, onClick, onOpen, onDragStart }: PhotoCellProps) {
   const { t } = useTranslation();
   const hasMeta = photo.rating > 0;
+  // True while this copy is animating out after a smart-dedupe removal.
+  const exiting = useDedupeExitStore((s) => s.ids.has(photo.id));
 
   const { data: albums = [] } = useAlbums();
   const setRating = useSetRating();
@@ -88,7 +92,11 @@ export function PhotoCell({ photo, selected, onClick, onOpen, onDragStart }: Pho
             selected
               ? "scale-[0.97] ring-2 ring-primary"
               : "ring-0 hover:scale-[0.99] hover:ring-1 hover:ring-border",
+            exiting && "pointer-events-none",
           )}
+          // Inline so the 1.6s duration wins over the tile's `duration-150`
+          // utility (which tailwindcss-animate also applies to animations).
+          style={exiting ? { animation: "dedupe-exit 1.6s ease forwards" } : undefined}
           draggable
           onClick={(e) => {
             // A plain click opens the viewer directly; modifier-clicks
@@ -228,6 +236,15 @@ export function PhotoCell({ photo, selected, onClick, onOpen, onDragStart }: Pho
         ) : null}
 
         <ContextMenuSeparator />
+
+        <ContextMenuItem
+          onSelect={() =>
+            useRenamePhoto.getState().open({ id: photo.id, filename: photo.filename })
+          }
+        >
+          <Pencil className="h-4 w-4 text-muted-foreground" />
+          {t("common.rename")}
+        </ContextMenuItem>
 
         <ContextMenuItem onSelect={reveal}>
           <FolderOpen className="h-4 w-4 text-muted-foreground" />

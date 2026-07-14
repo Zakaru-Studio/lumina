@@ -16,6 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { useConfig } from "@/hooks/useSettings";
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query";
 import { useImportAlbumsDialog } from "@/stores/importAlbumsDialogStore";
@@ -83,10 +85,12 @@ function TreeNode({ node, depth, rootIndex, rootNames, onRootNameChange }: TreeN
 export function ImportAlbumsDialog() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const { data: config } = useConfig();
   const paths = useImportAlbumsDialog((s) => s.paths);
   const close = useImportAlbumsDialog((s) => s.close);
 
   const [rootNames, setRootNames] = useState<string[]>([]);
+  const [mirror, setMirror] = useState(false);
 
   const preview = useQuery({
     queryKey: ["importPreview", paths],
@@ -99,13 +103,15 @@ export function ImportAlbumsDialog() {
     if (preview.data) setRootNames(preview.data.map((n) => n.name));
   }, [preview.data]);
 
-  // Reset local state when the dialog closes.
+  // Reset local state when the dialog closes; when it opens, default the mirror
+  // switch to the user's chosen folder-management mode.
   useEffect(() => {
     if (paths === null) setRootNames([]);
-  }, [paths]);
+    else setMirror(config?.folderSyncMode === "mirror");
+  }, [paths, config?.folderSyncMode]);
 
   const createAlbums = useMutation({
-    mutationFn: () => api.importAsAlbums(paths!, rootNames),
+    mutationFn: () => api.importAsAlbums(paths!, rootNames, mirror),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.albums });
       qc.invalidateQueries({ queryKey: qk.watchedFolders });
@@ -159,6 +165,16 @@ export function ImportAlbumsDialog() {
             ))
           )}
         </ScrollArea>
+
+        <label className="flex items-start justify-between gap-4 rounded-lg border p-3">
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">{t("importDialog.mirrorLabel")}</span>
+            <span className="block text-xs text-muted-foreground">
+              {t("importDialog.mirrorHint")}
+            </span>
+          </span>
+          <Switch checked={mirror} onCheckedChange={setMirror} />
+        </label>
 
         <DialogFooter className="items-center sm:justify-between">
           <Button variant="ghost" onClick={close}>

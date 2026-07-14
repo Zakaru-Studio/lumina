@@ -87,12 +87,34 @@
       "workersAuto": "Auto",
       "workersCount": "{{n}} threads"
     },
+    "folderSync": {
+      "title": "Folder management",
+      "description": "How albums relate to the folders on your disk.",
+      "mode": "Mode",
+      "modeHint": "Mirror keeps albums and folders in sync; app-only never touches your files.",
+      "modeUnset": "Not set",
+      "mirror": "Mirror",
+      "virtual": "App-only (virtual)"
+    },
     "folders": {
       "title": "Watched Folders",
       "description": "Folders Lumina indexes and monitors.",
       "empty": "No folders yet.",
       "removeAria": "Remove folder",
       "add": "Add folder…"
+    },
+    "backup": {
+      "title": "Device Backup",
+      "description": "Save photos from connected devices to an external drive.",
+      "destination": "Backup drive",
+      "destinationUnset": "Not set",
+      "choose": "Choose",
+      "autoPrompt": "Propose on connect",
+      "autoPromptHint": "Offer to back up when a device with photos is plugged in.",
+      "manual": "Back up now",
+      "manualHint": "Look for a connected device and start a backup.",
+      "backupNow": "Back up a device",
+      "noDevice": "No connected device with photos was found."
     },
     "library": {
       "title": "Library",
@@ -135,11 +157,14 @@
     "smartAlbums": "Smart Albums",
     "myAlbums": "My Albums",
     "createAlbum": "New album",
+    "collapseAll": "Collapse all albums",
+    "expandAll": "Expand all albums",
     "moveToRoot": "Move to root",
     "tags": "Tags",
     "importFolders": "Import folders",
     "renameAlbum": "Rename",
     "deleteAlbum": "Delete",
+    "mirrorAlbum": "Mirror album (synced with a folder)",
     "toggleSidebar": "Toggle sidebar",
     "searchPill": "Search…",
     "selectedCount": "{{n}} selected"
@@ -152,8 +177,55 @@
     "importOnly": "Import only",
     "loading": "Analyzing folders…",
     "createdToast": "Albums created",
+    "mirrorLabel": "Mirror folder (sync with Explorer)",
+    "mirrorHint": "Keep these albums in sync with the folders on disk, in both directions. Renaming, moving or deleting an album changes the real folders.",
     "mediaCount_one": "{{count}} item",
     "mediaCount_other": "{{count}} items"
+  },
+  "folderSync": {
+    "title": "How should Lumina manage your folders?",
+    "description": "Choose how albums relate to the folders on your disk. You can change this later in Settings.",
+    "mirror": {
+      "title": "100% mirror",
+      "description": "Albums ARE your on-disk folders. Renaming, moving or deleting an album changes the real folders, and changes made in Explorer sync back to Lumina."
+    },
+    "virtual": {
+      "title": "Albums managed in the app",
+      "description": "Albums live only inside Lumina. Your files and folders are never moved, renamed or deleted."
+    },
+    "changeLater": "You can switch modes anytime from Settings."
+  },
+  "rename": {
+    "title": "Rename",
+    "placeholder": "File name"
+  },
+  "mirrorDelete": {
+    "title": "Delete this folder?",
+    "description": "«{{name}}» is a mirror album. Deleting it moves the folder and all of its contents to the Recycle Bin. You can restore them from there.",
+    "confirm": "Move to Recycle Bin"
+  },
+  "backup": {
+    "title": "Back up {{label}}?",
+    "description_one": "This device holds {{count}} photo. New ones are copied to your backup drive; already-saved photos are skipped.",
+    "description_other": "This device holds {{count}} photos. New ones are copied to your backup drive; already-saved photos are skipped.",
+    "chooseDestination": "Choose backup drive",
+    "changeDestination": "Change drive",
+    "destinationLabel": "Backup drive",
+    "noDestination": "Choose the external drive where photos should be saved.",
+    "analyzing": "Analyzing…",
+    "previewNew_one": "{{count}} new photo",
+    "previewNew_other": "{{count}} new photos",
+    "previewSkip_one": "{{count}} already backed up",
+    "previewSkip_other": "{{count}} already backed up",
+    "nothingNew": "Everything is already backed up.",
+    "start": "Back up",
+    "skip": "Skip",
+    "copying": "Copying…",
+    "copyingProgress": "Copying {{done}} / {{total}}",
+    "close": "Close",
+    "doneToast": "Backup complete",
+    "doneSummary_one": "{{copied}} copied · {{skipped}} skipped",
+    "doneSummary_other": "{{copied}} copied · {{skipped}} skipped"
   },
   "command": {
     "placeholder": "Search photos or jump to…",
@@ -238,7 +310,8 @@
     "editDateUnsupported": "Date editing isn't available for this format (RAW/video)",
     "dimensions": "Dimensions",
     "size": "Size",
-    "folder": "Folder"
+    "folder": "Folder",
+    "editImage": "Edit image"
   },
   "editor": {
     "editing": "Editing…",
@@ -403,5 +476,23 @@
       "east": "E",
       "west": "W"
     }
+  },
+  "dedupe": {
+    "button": "Deduplicate",
+    "analyzing": "Analyzing…",
+    "title": "Smart deduplicate",
+    "summary": "{{remove}} copy(ies) to remove across {{groups}} duplicate group(s). The best copy of each group is kept.",
+    "nothingToDo": "No duplicates to deduplicate.",
+    "planError": "Could not compute the dedupe plan",
+    "kept": "Kept",
+    "copyCount": "{{count}} to remove",
+    "removalMode": "Removal mode",
+    "modeCatalog": "Remove from catalog",
+    "modeTrash": "OS trash",
+    "modeCatalogHint": "Copies leave the library; the files stay on disk. Undoable.",
+    "modeTrashHint": "Duplicate files are moved to the system trash. Frees disk space.",
+    "working": "Working…",
+    "confirm": "Remove {{count}} copy(ies)",
+    "selectionAction": "Deduplicate selection"
   }
 }

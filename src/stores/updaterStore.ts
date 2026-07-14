@@ -45,6 +45,8 @@ interface UpdaterState {
   check: (opts?: { manual?: boolean }) => Promise<void>;
   /** Download + install the pending update, then relaunch the app. */
   installAndRestart: () => Promise<void>;
+  /** Re-open the update dialog (e.g. from the header update indicator). */
+  openDialog: () => void;
   /** Close the dialog without installing. */
   dismiss: () => void;
 }
@@ -111,6 +113,8 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
       set({ status: "error", error: message });
     }
   },
+
+  openDialog: () => set({ dialogOpen: true }),
 
   dismiss: () => set({ dialogOpen: false }),
 }));

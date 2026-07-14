@@ -36,6 +36,7 @@ interface UiState {
   setLanguage: (language: Language) => void;
   toggleSidebar: () => void;
   toggleAlbumCollapsed: (id: string) => void;
+  setCollapsedAlbums: (ids: string[]) => void;
   bumpThumbCacheBust: () => void;
   setCellSize: (size: number) => void;
   zoomBy: (delta: number) => void;
@@ -67,6 +68,7 @@ export const useUiStore = create<UiState>()(
             ? s.collapsedAlbums.filter((a) => a !== id)
             : [...s.collapsedAlbums, id],
         })),
+      setCollapsedAlbums: (collapsedAlbums) => set({ collapsedAlbums }),
       bumpThumbCacheBust: () => set((s) => ({ thumbCacheBust: s.thumbCacheBust + 1 })),
       setCellSize: (size) =>
         set({ cellSize: Math.max(MIN_CELL, Math.min(MAX_CELL, Math.round(size))) }),

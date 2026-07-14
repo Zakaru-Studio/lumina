@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query";
+import { DEDUPE_EXIT_MS, useDedupeExitStore } from "@/stores/dedupeExitStore";
 
 function usePhotoInvalidation() {
   const qc = useQueryClient();
@@ -156,6 +157,66 @@ export function useDeletePhotosFromDisk() {
     },
     onError: (err) =>
       toast.error("Could not delete from disk", {
+        description: err instanceof Error ? err.message : String(err),
+      }),
+  });
+}
+
+export type DedupeMode = "catalog" | "trash";
+
+/**
+ * Remove the redundant copies chosen by a smart-dedupe plan. Unlike the plain
+ * removal hooks this keeps the rows in the grid, flags them as "exiting" so
+ * {@link PhotoCell} can pulse-then-fade them out, and only drops them from the
+ * cache once that animation has played ({@link DEDUPE_EXIT_MS}).
+ *
+ * `mode` chooses how the copies go away: `catalog` (undoable soft-remove) or
+ * `trash` (files sent to the OS trash).
+ */
+export function useDedupeRemove() {
+  const patchOut = useDeleteInvalidation();
+  const invalidateAll = usePhotoInvalidation();
+  const startExit = useDedupeExitStore((s) => s.start);
+  const clearExit = useDedupeExitStore((s) => s.clear);
+  return useMutation({
+    mutationFn: ({ ids, mode }: { ids: string[]; mode: DedupeMode }) =>
+      mode === "catalog" ? api.removePhotos(ids) : api.deletePhotosFromDisk(ids),
+    onSuccess: (_removed, { ids, mode }) => {
+      // Animate the removed copies out, then drop them from the cache.
+      startExit(ids);
+      const timer = window.setTimeout(() => {
+        patchOut(ids);
+        clearExit();
+      }, DEDUPE_EXIT_MS);
+
+      const removed = `Deduplicated ${plural(ids.length, "copy", "copies")}`;
+      if (mode === "catalog") {
+        toast.success(removed, {
+          description: "Removed from the catalog; the files were not touched.",
+          action: {
+            label: "Undo",
+            onClick: () => {
+              // Cancel the pending drop and restore before the rows leave.
+              window.clearTimeout(timer);
+              clearExit();
+              api
+                .restorePhotos(ids)
+                .then(() => {
+                  invalidateAll();
+                  toast.success("Restored");
+                })
+                .catch(() => toast.error("Could not restore"));
+            },
+          },
+        });
+      } else {
+        toast.success(removed, {
+          description: "Duplicate files were moved to the trash.",
+        });
+      }
+    },
+    onError: (err) =>
+      toast.error("Could not deduplicate", {
         description: err instanceof Error ? err.message : String(err),
       }),
   });

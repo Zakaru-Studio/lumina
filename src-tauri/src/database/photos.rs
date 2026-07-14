@@ -161,6 +161,22 @@ pub fn set_taken_at(
     Ok(())
 }
 
+/// Rename a photo for display only (the `filename` column), leaving the file on
+/// disk and its `path`/`folder` untouched. Used for virtual (non-mirror) photos
+/// where a rename is a catalog-only relabel. Refreshes the FTS row so the new
+/// name is searchable.
+pub fn set_filename(conn: &Connection, id: &str, filename: &str) -> Result<()> {
+    let n = conn.execute(
+        "UPDATE photos SET filename = ?2 WHERE id = ?1 AND deleted_at IS NULL",
+        params![id, filename],
+    )?;
+    if n == 0 {
+        return Err(Error::NotFound(format!("photo {id}")));
+    }
+    search::reindex(conn, id)?;
+    Ok(())
+}
+
 /// Update the thumbnail status/path for a photo.
 pub fn set_thumb(conn: &Connection, id: &str, status: ThumbStatus, path: Option<&str>) -> Result<()> {
     conn.execute(
@@ -481,6 +497,89 @@ pub fn restore(conn: &Connection, ids: &[String]) -> Result<u64> {
     Ok(n)
 }
 
+/// All live photos located at (an exact file) or under (a folder) `prefix`.
+///
+/// Uses a byte-range on the unique `path` index (`prefix+SEP` .. `prefix+SEP⁺`)
+/// rather than `LIKE`, so `_`/`%`/`\` in folder names can never cause false
+/// matches. Backbone of mirror relocation and reconciliation.
+pub fn by_path_prefix(conn: &Connection, prefix: &str) -> Result<Vec<Photo>> {
+    let sep = std::path::MAIN_SEPARATOR;
+    let low = format!("{prefix}{sep}");
+    // Exclusive upper bound: same prefix with the separator byte incremented.
+    let high = format!("{prefix}{}", ((sep as u8) + 1) as char);
+    let sql = format!(
+        "SELECT {COLUMNS} FROM photos \
+         WHERE deleted_at IS NULL AND (path = ?1 OR (path >= ?2 AND path < ?3)) \
+         ORDER BY path"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params![prefix, low, high], |r| map_row(r))?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
+/// Relocate every live photo at/under `old_prefix` to `new_prefix`, rewriting
+/// `path`/`folder`/`filename` **in place** so identity (id, rating, favorite,
+/// tags, album membership) is preserved, and refreshing the FTS index. Works for
+/// a whole folder (dir prefix) or a single file (exact path). Returns the count.
+pub fn relocate_prefix(conn: &Connection, old_prefix: &str, new_prefix: &str) -> Result<usize> {
+    let affected = by_path_prefix(conn, old_prefix)?;
+    let tx = conn.unchecked_transaction()?;
+    let mut n = 0usize;
+    for p in &affected {
+        // `old_prefix` is a byte-prefix of `p.path` (guaranteed by the range
+        // query), so slicing at its length is on a valid boundary.
+        let rest = &p.path[old_prefix.len()..];
+        let new_path = format!("{new_prefix}{rest}");
+        let np = std::path::Path::new(&new_path);
+        let new_folder = np
+            .parent()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let new_filename = np
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_default();
+        tx.execute(
+            "UPDATE photos SET path = ?2, folder = ?3, filename = ?4 WHERE id = ?1",
+            params![p.id, new_path, new_folder, new_filename],
+        )?;
+        search::reindex(&tx, &p.id)?;
+        n += 1;
+    }
+    tx.commit()?;
+    Ok(n)
+}
+
+/// Soft-delete every live photo at/under `folder_prefix` (catalog-only). Returns
+/// the number affected. Used when a mirror folder is trashed on disk.
+pub fn soft_delete_under(conn: &Connection, folder_prefix: &str, when: i64) -> Result<u64> {
+    let ids: Vec<String> = by_path_prefix(conn, folder_prefix)?
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    soft_delete(conn, &ids, when)
+}
+
+/// Live photos whose content hash matches `hash`. Backs mirror move-detection
+/// (a file that vanished from one path but re-appears, byte-identical, at
+/// another is a move, not a delete). Uses `idx_photos_hash`.
+pub fn get_by_hash(conn: &Connection, hash: &str) -> Result<Vec<Photo>> {
+    let sql = format!(
+        "SELECT {COLUMNS} FROM photos WHERE hash = ?1 AND deleted_at IS NULL ORDER BY path"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params![hash], |r| map_row(r))?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
 /// Predicate matching live photos that share their content hash with at least
 /// one other live photo (i.e. duplicates).
 const DUP_PREDICATE: &str = "deleted_at IS NULL AND hash IS NOT NULL AND hash IN \
@@ -511,6 +610,119 @@ pub fn duplicates(conn: &Connection, offset: i64, limit: i64) -> Result<Page<Pho
         total,
         offset,
         limit,
+    })
+}
+
+/// Penalty for duplicate-copy markers in a filename — a parenthesised number
+/// (`photo (1).jpg`) or a "copy"/"copie" word. Lower is a cleaner name.
+fn copy_marker_penalty(filename: &str) -> i64 {
+    let lower = filename.to_lowercase();
+    let mut penalty = 0;
+    if lower.contains("copy") || lower.contains("copie") {
+        penalty += 1;
+    }
+    // A parenthesised run of digits, e.g. "(1)".
+    let bytes = lower.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'(' {
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j > i + 1 && j < bytes.len() && bytes[j] == b')' {
+                penalty += 1;
+                i = j + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+    penalty
+}
+
+/// Ordering key for picking the copy to KEEP within a duplicate group. The
+/// smallest key wins, encoding the agreed priority: richest metadata first,
+/// then the cleanest filename, then the shallowest folder, then the oldest
+/// import, then the shortest path, with the id as a stable final tie-break.
+fn keeper_key(photo: &Photo, tag_count: i64) -> (i64, i64, usize, i64, usize, String) {
+    let metadata = photo.rating as i64 + if photo.is_favorite { 5 } else { 0 } + tag_count;
+    let depth = photo.folder.matches(|c| c == '/' || c == '\\').count();
+    (
+        -metadata,
+        copy_marker_penalty(&photo.filename),
+        depth,
+        photo.imported_at,
+        photo.path.chars().count(),
+        photo.id.clone(),
+    )
+}
+
+/// Build a "smart dedupe" proposal: group live duplicates by content hash and,
+/// for each group, choose one copy to keep (see [`keeper_key`]) and mark the
+/// rest for removal. Purely advisory — nothing is deleted here.
+///
+/// With `ids = None` the whole catalog is considered. With `ids = Some(..)` only
+/// those photos are — a "test on a selection" scope: copies are only proposed
+/// for removal when at least two of the *selected* photos share a hash.
+pub fn dedupe_plan(
+    conn: &Connection,
+    ids: Option<&[String]>,
+) -> Result<crate::core::models::DedupePlan> {
+    use crate::core::models::{DedupeGroup, DedupePlan};
+    use std::collections::BTreeMap;
+
+    // Scope: whole-catalog duplicates, or just the given selection.
+    let (where_sql, id_params): (String, Vec<&String>) = match ids {
+        Some(ids) => {
+            if ids.is_empty() {
+                return Ok(DedupePlan { groups: vec![], total_remove: 0 });
+            }
+            let placeholders = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+            (
+                format!("deleted_at IS NULL AND hash IS NOT NULL AND id IN ({placeholders})"),
+                ids.iter().collect(),
+            )
+        }
+        None => (DUP_PREDICATE.to_string(), Vec::new()),
+    };
+
+    let sql = format!(
+        "SELECT {COLUMNS}, \
+         (SELECT COUNT(*) FROM photo_tags pt WHERE pt.photo_id = photos.id) AS tag_count \
+         FROM photos WHERE {where_sql} ORDER BY hash, id"
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(params_from_iter(id_params), |r| {
+        let photo = map_row(r)?;
+        let tag_count: i64 = r.get(29)?;
+        Ok((photo, tag_count))
+    })?;
+
+    // Group by content hash, preserving each photo's tag count for scoring.
+    let mut by_hash: BTreeMap<String, Vec<(Photo, i64)>> = BTreeMap::new();
+    for row in rows {
+        let (photo, tag_count) = row?;
+        let hash = photo.hash.clone().unwrap_or_default();
+        by_hash.entry(hash).or_default().push((photo, tag_count));
+    }
+
+    let mut groups = Vec::new();
+    let mut total_remove = 0;
+    for (_hash, mut items) in by_hash {
+        if items.len() < 2 {
+            continue; // Not actually duplicated (defensive).
+        }
+        items.sort_by(|(pa, ta), (pb, tb)| keeper_key(pa, *ta).cmp(&keeper_key(pb, *tb)));
+        let keep = items.remove(0).0;
+        let remove: Vec<Photo> = items.into_iter().map(|(p, _)| p).collect();
+        total_remove += remove.len() as i64;
+        groups.push(DedupeGroup { keep, remove });
+    }
+
+    Ok(DedupePlan {
+        groups,
+        total_remove,
     })
 }
 

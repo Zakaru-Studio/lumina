@@ -3,7 +3,13 @@
  * `events::names` module.
  */
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { ScanProgress, ScanSummary } from "@/types";
+import type {
+  BackupProgress,
+  BackupSummary,
+  DeviceInfo,
+  ScanProgress,
+  ScanSummary,
+} from "@/types";
 
 export const EVENTS = {
   scanProgress: "scan://progress",
@@ -11,6 +17,9 @@ export const EVENTS = {
   libraryChanged: "library://changed",
   thumbReady: "thumb://ready",
   thumbsRegenerated: "thumb://regenerated",
+  deviceConnected: "device://connected",
+  backupProgress: "backup://progress",
+  backupDone: "backup://done",
 } as const;
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {
@@ -27,4 +36,16 @@ export function onLibraryChanged(cb: () => void): Promise<UnlistenFn> {
 
 export function onThumbsRegenerated(cb: () => void): Promise<UnlistenFn> {
   return listen(EVENTS.thumbsRegenerated, () => cb());
+}
+
+export function onDeviceConnected(cb: (d: DeviceInfo) => void): Promise<UnlistenFn> {
+  return listen<DeviceInfo>(EVENTS.deviceConnected, (e) => cb(e.payload));
+}
+
+export function onBackupProgress(cb: (p: BackupProgress) => void): Promise<UnlistenFn> {
+  return listen<BackupProgress>(EVENTS.backupProgress, (e) => cb(e.payload));
+}
+
+export function onBackupDone(cb: (s: BackupSummary) => void): Promise<UnlistenFn> {
+  return listen<BackupSummary>(EVENTS.backupDone, (e) => cb(e.payload));
 }

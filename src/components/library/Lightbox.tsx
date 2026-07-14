@@ -6,6 +6,7 @@ import {
   Heart,
   Maximize,
   Minus,
+  Pencil,
   Plus,
   SlidersHorizontal,
   X,
@@ -35,6 +36,7 @@ import {
   useSetRating,
 } from "@/hooks/usePhotoMutations";
 import { useEditorStore } from "@/stores/editorStore";
+import { useRenamePhoto } from "@/stores/renamePhotoStore";
 import type { Photo } from "@/types";
 
 /** Props for {@link Lightbox}. */
@@ -364,17 +366,8 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
 
   return (
     <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur animate-fade-in">
-      {/* Top-right toolbar: edit + close */}
+      {/* Top-right toolbar: close (image editing lives in the metadata panel) */}
       <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={t("common.edit")}
-          disabled={!photo}
-          onClick={() => photo && useEditorStore.getState().open(photo.id)}
-        >
-          <SlidersHorizontal className="h-5 w-5" />
-        </Button>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("common.close")}>
           <X className="h-5 w-5" />
         </Button>
@@ -561,9 +554,22 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
         ) : (
           <>
         <div className="flex flex-col gap-1">
-          <h2 className="truncate text-base font-medium text-foreground" title={photo.filename}>
-            {photo.filename}
-          </h2>
+          <div className="flex items-center gap-1.5">
+            <h2 className="min-w-0 flex-1 truncate text-base font-medium text-foreground" title={photo.filename}>
+              {photo.filename}
+            </h2>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label={t("rename.title")}
+              onClick={() =>
+                useRenamePhoto.getState().open({ id: photo.id, filename: photo.filename })
+              }
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          </div>
           <p className="text-xs text-muted-foreground">{formatCamera(photo)}</p>
         </div>
 
@@ -591,6 +597,17 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
               <Heart className={cn("h-4 w-4", photo.isFavorite && "fill-current")} />
             </Button>
           </div>
+          {/* Primary action: open the non-destructive image editor. Videos
+              can't be edited, so it's only offered for photos. */}
+          {!isVideo ? (
+            <Button
+              className="w-full"
+              onClick={() => useEditorStore.getState().open(photo.id)}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              {t("lightbox.editImage")}
+            </Button>
+          ) : null}
         </div>
 
         {/* Tags */}

@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, useNavigate } from "react-router-dom";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   Aperture,
   Calendar,
   CalendarDays,
+  ChevronsDownUp,
+  ChevronsUpDown,
   FolderHeart,
   Heart,
   Images,
@@ -101,6 +104,8 @@ const NAV: NavItem[] = [
 export function Sidebar() {
   const { t } = useTranslation();
   const collapsed = useUiStore((s) => s.sidebarCollapsed);
+  const collapsedAlbums = useUiStore((s) => s.collapsedAlbums);
+  const setCollapsedAlbums = useUiStore((s) => s.setCollapsedAlbums);
   const navigate = useNavigate();
   const { data: albums = [] } = useAlbums();
   const { data: tags = [] } = useTags();
@@ -109,6 +114,12 @@ export function Sidebar() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newParent, setNewParent] = useState<string>(ROOT_VALUE);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  // Resolve the running app version (from tauri.conf.json) once.
+  useEffect(() => {
+    void getVersion().then(setAppVersion).catch(() => setAppVersion(null));
+  }, []);
 
   const submitCreate = () => {
     const name = newName.trim();
@@ -127,6 +138,17 @@ export function Sidebar() {
   };
 
   const smartAlbums = albums.filter((a) => a.kind === "smart" && !hideEmptySmart(a));
+
+  // Ids of manual albums that have at least one manual child — the only rows
+  // that can be folded, and thus the targets of the collapse/expand-all action.
+  const manualAlbums = albums.filter((a) => a.kind === "manual");
+  const manualIds = new Set(manualAlbums.map((a) => a.id));
+  const expandableIds = manualAlbums
+    .filter((a) => a.parentId && manualIds.has(a.parentId))
+    .map((a) => a.parentId as string);
+  const parentIds = Array.from(new Set(expandableIds));
+  const allCollapsed =
+    parentIds.length > 0 && parentIds.every((id) => collapsedAlbums.includes(id));
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -155,7 +177,14 @@ export function Sidebar() {
           <Aperture className="h-4 w-4" />
         </div>
         {!collapsed ? (
-          <span className="text-base font-semibold tracking-tight text-foreground">Lumina</span>
+          <span className="flex items-baseline gap-1.5">
+            <span className="text-base font-semibold tracking-tight text-foreground">Lumina</span>
+            {appVersion ? (
+              <span className="text-[11px] font-normal tabular-nums text-muted-foreground">
+                v{appVersion}
+              </span>
+            ) : null}
+          </span>
         ) : null}
       </div>
 
@@ -211,15 +240,32 @@ export function Sidebar() {
           <SidebarGroup
             label={t("shell.myAlbums")}
             action={
-              <button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                aria-label={t("shell.createAlbum")}
-                title={t("shell.createAlbum")}
-                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
+              <div className="flex items-center gap-0.5">
+                {parentIds.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedAlbums(allCollapsed ? [] : parentIds)}
+                    aria-label={allCollapsed ? t("shell.expandAll") : t("shell.collapseAll")}
+                    title={allCollapsed ? t("shell.expandAll") : t("shell.collapseAll")}
+                    className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                  >
+                    {allCollapsed ? (
+                      <ChevronsUpDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronsDownUp className="h-4 w-4" />
+                    )}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  aria-label={t("shell.createAlbum")}
+                  title={t("shell.createAlbum")}
+                  className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
             }
           >
             <AlbumTree albums={albums} />

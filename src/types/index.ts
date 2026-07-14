@@ -47,6 +47,18 @@ export interface Photo {
   tags: string[];
 }
 
+/** One hash-identical set of duplicates: the copy to keep and the ones to drop. */
+export interface DedupeGroup {
+  keep: Photo;
+  remove: Photo[];
+}
+
+/** A "smart dedupe" proposal across the whole catalog (advisory until confirmed). */
+export interface DedupePlan {
+  groups: DedupeGroup[];
+  totalRemove: number;
+}
+
 /**
  * A lightweight geolocated photo for the map view. Mirrors the backend
  * `MapPoint` — just enough to plot a marker and show its thumbnail, without the
@@ -79,6 +91,8 @@ export interface Album {
   createdAt: number;
   /** Parent album id for nesting; `null` for a root album (manual albums only). */
   parentId: string | null;
+  /** On-disk folder this album mirrors; `null` for virtual/smart albums. */
+  folderPath: string | null;
   count: number;
 }
 
@@ -87,6 +101,8 @@ export interface WatchedFolder {
   path: string;
   addedAt: number;
   active: boolean;
+  /** True when this root is a bidirectional mirror of its on-disk folders. */
+  mirror: boolean;
 }
 
 /**
@@ -126,6 +142,13 @@ export interface AppConfig {
   workerThreads: number;
   language: string;
   theme: Theme;
+  /** Destination folder (external drive) for USB-device backups. */
+  backupDestination: string | null;
+  /** Auto-open the backup prompt when a device with photos is connected. */
+  autoBackupPrompt: boolean;
+  /** Default folder-management mode chosen at first import: `"mirror"` |
+   * `"virtual"`, or `null` until the user picks (triggers the choice modal). */
+  folderSyncMode: string | null;
 }
 
 export interface AiStatus {
@@ -189,6 +212,42 @@ export interface ScanSummary {
   updated: number;
   skipped: number;
   failed: number;
+  durationMs: number;
+}
+
+/** A connected removable device that may hold media to back up. */
+export interface DeviceInfo {
+  /** Root mount path (e.g. `E:\` on Windows). */
+  path: string;
+  /** Human-readable volume label, or the drive letter when unavailable. */
+  label: string;
+  /** Rough count of media files found (capped during the probe). */
+  mediaCount: number;
+}
+
+/** Fast preview of what a device backup would copy vs skip. */
+export interface BackupPreview {
+  toCopy: number;
+  toSkip: number;
+  bytes: number;
+}
+
+/** Live progress of a running backup. */
+export interface BackupProgress {
+  processed: number;
+  total: number;
+  copied: number;
+  skipped: number;
+  bytesCopied: number;
+  current: string | null;
+}
+
+/** Summary emitted when a backup run completes. */
+export interface BackupSummary {
+  copied: number;
+  skipped: number;
+  failed: number;
+  bytesCopied: number;
   durationMs: number;
 }
 

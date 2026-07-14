@@ -3,6 +3,22 @@
 @tailwind utilities;
 
 /*
+ * Deduplicated copies leaving the grid: two attention pulses (~1s) then a
+ * fade-out (~0.6s). Applied via an inline `animation` (see PhotoCell) so the
+ * duration isn't clobbered by the tile's `duration-150` utility, which
+ * tailwindcss-animate also maps onto `animation-duration`. Total duration is
+ * kept in sync with DEDUPE_EXIT_MS.
+ */
+@keyframes dedupe-exit {
+  0% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+  12% { transform: scale(1.04); box-shadow: 0 0 0 3px hsl(var(--primary) / 0.7); }
+  30% { transform: scale(1); box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+  42% { transform: scale(1.04); box-shadow: 0 0 0 3px hsl(var(--primary) / 0.7); }
+  60% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 hsl(var(--primary) / 0); }
+  100% { opacity: 0; transform: scale(0.92); }
+}
+
+/*
  * Design tokens. A calm, spacious, low-border aesthetic (Apple Photos / Linear
  * inspired). Light and dark are both first-class.
  */

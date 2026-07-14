@@ -7,25 +7,38 @@
  *   e.g. node scripts/release.mjs 0.2.0 "Trash-aware delete, sidebar counts."
  *
  * What it does, in order:
- *   1. Validates preconditions (clean git tree, gh auth, signing key, semver).
+ *   1. Validates preconditions (clean git tree, signing key, upload config, semver).
  *   2. Bumps the version in package.json, package-lock.json, tauri.conf.json
  *      and Cargo.toml.
  *   3. Builds a SIGNED Windows NSIS installer (`tauri build --bundles nsis`),
  *      producing the `-setup.exe` and its `.sig` updater artifact.
- *   4. Writes `latest.json` (the updater manifest the app polls).
- *   5. Commits the bump, tags `v<version>`, pushes branch + tag.
- *   6. Creates the GitHub Release with the installer + latest.json attached.
+ *   4. Writes `latest.json` (the updater manifest the app polls) pointing at the
+ *      self-hosted download URL.
+ *   5. Commits the bump, tags `v<version>`, pushes branch + tag to the (private)
+ *      code repo.
+ *   6. Uploads the installer + latest.json to the self-hosted update host over
+ *      SSH (key auth) so installed apps can fetch them publicly.
  *
  * Secrets come from a gitignored `.env.release` at the repo root:
  *   LUMINA_SIGNING_KEY_PATH=<path to the updater private key>
  *   TAURI_SIGNING_PRIVATE_KEY_PASSWORD=<its password>
- * The matching public key is committed in `tauri.conf.json`. See README
- * "Releasing" for one-time setup.
+ *   LUMINA_UPDATE_BASE_URL=<public https base serving the two files>
+ *   LUMINA_SSH_HOST / LUMINA_SSH_USER / LUMINA_SSH_KEY / LUMINA_SSH_REMOTE_DIR
+ * The updater public key is committed in `tauri.conf.json`, whose `endpoints`
+ * must point at `<LUMINA_UPDATE_BASE_URL>/latest.json`. See README "Releasing".
  *
- * Node built-ins only — no extra dependencies.
+ * Node built-ins only — no extra dependencies (uses the system `scp`).
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -157,15 +170,6 @@ async function main() {
   const existingTags = capture("git", ["tag", "--list", tag]);
   if (existingTags) fail(`Tag ${tag} already exists.`);
 
-  try {
-    capture("gh", ["--version"]);
-  } catch {
-    fail("GitHub CLI (gh) not found. Install it and run `gh auth login`.");
-  }
-  const auth = spawnSync("gh", ["auth", "status"], { shell: true, cwd: ROOT });
-  if (auth.status !== 0) fail("gh is not authenticated. Run `gh auth login`.");
-  info("gh authenticated");
-
   const secrets = loadEnvRelease();
   const keyPath = secrets.LUMINA_SIGNING_KEY_PATH;
   const keyPassword = secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD;
@@ -176,8 +180,22 @@ async function main() {
   const privateKey = readFileSync(keyPath, "utf8");
   info("signing key loaded");
 
-  const repo = resolveRepoSlug();
-  info(`repo ${repo}`);
+  // Self-hosted distribution: the public HTTPS base URL that serves the
+  // installer + latest.json (must match the updater endpoint baked into the app),
+  // and the command used to upload the two files there.
+  const baseUrl = (secrets.LUMINA_UPDATE_BASE_URL || "").replace(/\/+$/, "");
+  const sshHost = secrets.LUMINA_SSH_HOST || "";
+  const sshUser = secrets.LUMINA_SSH_USER || "";
+  const sshKey = secrets.LUMINA_SSH_KEY || "";
+  const remoteDir = secrets.LUMINA_SSH_REMOTE_DIR || ""; // "" = the account's home dir
+  if (!baseUrl || !sshHost || !sshUser || !sshKey) {
+    fail(
+      "Self-hosting needs LUMINA_UPDATE_BASE_URL, LUMINA_SSH_HOST, LUMINA_SSH_USER " +
+        "and LUMINA_SSH_KEY in .env.release.",
+    );
+  }
+  if (!existsSync(sshKey)) fail(`SSH deploy key not found at LUMINA_SSH_KEY=${sshKey}.`);
+  info(`update host ${baseUrl} (scp to ${sshUser}@${sshHost})`);
 
   // --- Version bump --------------------------------------------------------
   step(`Bumping version to ${version}`);
@@ -217,7 +235,7 @@ async function main() {
 
   // --- Updater manifest ----------------------------------------------------
   step("Writing latest.json");
-  const downloadUrl = `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(setupExe)}`;
+  const downloadUrl = `${baseUrl}/${encodeURIComponent(setupExe)}`;
   const manifest = {
     version,
     notes: notes || `Lumina ${version}`,
@@ -245,25 +263,37 @@ async function main() {
   run("git", ["push", "origin", branch]);
   run("git", ["push", "origin", tag]);
 
-  // --- GitHub Release ------------------------------------------------------
-  step("Creating GitHub Release");
-  const notesArgs = notes ? ["--notes", notes] : ["--generate-notes"];
-  run("gh", [
-    "release",
-    "create",
-    tag,
-    setupPath,
-    manifestPath,
-    "--repo",
-    repo,
-    "--title",
-    `Lumina ${version}`,
-    ...notesArgs,
-  ]);
+  // --- Publish to the self-hosted update host ------------------------------
+  step("Staging release artifacts");
+  const distDir = join(ROOT, "release-dist");
+  rmSync(distDir, { recursive: true, force: true });
+  mkdirSync(distDir, { recursive: true });
+  copyFileSync(setupPath, join(distDir, setupExe));
+  copyFileSync(manifestPath, join(distDir, "latest.json"));
+  info(`staged ${setupExe} + latest.json in ${distDir}`);
+
+  step("Uploading to the update host (scp)");
+  const target = `${sshUser}@${sshHost}:${remoteDir}`;
+  info(`scp → ${sshUser}@${sshHost}:${remoteDir || "<home>"}`);
+  // No shell: pass file args directly so spaces/globs never bite. Key auth only.
+  const scp = spawnSync(
+    "scp",
+    [
+      "-i", sshKey,
+      "-o", "BatchMode=yes",
+      "-o", "StrictHostKeyChecking=accept-new",
+      "-o", "ConnectTimeout=30",
+      join(distDir, setupExe),
+      join(distDir, "latest.json"),
+      target,
+    ],
+    { stdio: "inherit", cwd: ROOT },
+  );
+  if (scp.status !== 0) fail("scp upload to the update host failed.");
 
   console.log(
     `\n${c.green("✔")} Released ${c.bold(tag)}. ` +
-      `Installed apps will detect it via ${c.dim("releases/latest/download/latest.json")}.\n`,
+      `Installed apps will detect it via ${c.dim(baseUrl + "/latest.json")}.\n`,
   );
 }
 

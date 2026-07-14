@@ -12,12 +12,22 @@
  */
 import * as React from "react";
 import {
+  CircleDot,
+  Contrast,
+  Droplet,
   FlipHorizontal,
   FlipVertical,
+  Focus,
+  type LucideIcon,
+  Palette,
   RotateCcw,
   RotateCw,
   Save,
   SaveAll,
+  Sparkles,
+  Sun,
+  SunMedium,
+  Thermometer,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,13 +47,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePhoto } from "@/hooks/usePhotos";
 import {
@@ -74,16 +77,22 @@ import { mimeForPath, PREVIEW_MAX_EDGE, renderTo } from "./render";
  * Declarative config for the Adjust tab sliders. `labelKey` is resolved against
  * the `editor` i18n namespace at render time.
  */
-const ADJUST_FIELDS: { key: keyof AdjustParams; labelKey: string; min: number; max: number }[] = [
-  { key: "exposure", labelKey: "editor.exposure", min: -100, max: 100 },
-  { key: "brightness", labelKey: "editor.brightness", min: -100, max: 100 },
-  { key: "contrast", labelKey: "editor.contrast", min: -100, max: 100 },
-  { key: "saturation", labelKey: "editor.saturation", min: -100, max: 100 },
-  { key: "vibrance", labelKey: "editor.vibrance", min: -100, max: 100 },
-  { key: "warmth", labelKey: "editor.warmth", min: -100, max: 100 },
-  { key: "clarity", labelKey: "editor.clarity", min: -100, max: 100 },
-  { key: "sharpness", labelKey: "editor.sharpness", min: 0, max: 100 },
-  { key: "vignette", labelKey: "editor.vignette", min: 0, max: 100 },
+const ADJUST_FIELDS: {
+  key: keyof AdjustParams;
+  labelKey: string;
+  min: number;
+  max: number;
+  Icon: LucideIcon;
+}[] = [
+  { key: "exposure", labelKey: "editor.exposure", min: -100, max: 100, Icon: Sun },
+  { key: "brightness", labelKey: "editor.brightness", min: -100, max: 100, Icon: SunMedium },
+  { key: "contrast", labelKey: "editor.contrast", min: -100, max: 100, Icon: Contrast },
+  { key: "saturation", labelKey: "editor.saturation", min: -100, max: 100, Icon: Droplet },
+  { key: "vibrance", labelKey: "editor.vibrance", min: -100, max: 100, Icon: Palette },
+  { key: "warmth", labelKey: "editor.warmth", min: -100, max: 100, Icon: Thermometer },
+  { key: "clarity", labelKey: "editor.clarity", min: -100, max: 100, Icon: Sparkles },
+  { key: "sharpness", labelKey: "editor.sharpness", min: 0, max: 100, Icon: Focus },
+  { key: "vignette", labelKey: "editor.vignette", min: 0, max: 100, Icon: CircleDot },
 ];
 
 const ASPECT_OPTIONS: { value: AspectKey; labelKey: string }[] = [
@@ -407,6 +416,7 @@ function EditorShell({ photoId }: { photoId: string }) {
                   <AdjustSlider
                     key={f.key}
                     label={t(f.labelKey)}
+                    Icon={f.Icon}
                     min={f.min}
                     max={f.max}
                     value={params.adjust[f.key]}
@@ -422,18 +432,19 @@ function EditorShell({ photoId }: { photoId: string }) {
               <TabsContent value="crop" className="mt-0 space-y-5">
                 <div className="space-y-2">
                   <Label>{t("editor.aspectRatio")}</Label>
-                  <Select value={params.crop.aspect} onValueChange={(v) => setAspect(v as AspectKey)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ASPECT_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {t(o.labelKey)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="grid grid-cols-3 gap-2">
+                    {ASPECT_OPTIONS.map((o) => (
+                      <Button
+                        key={o.value}
+                        variant={params.crop.aspect === o.value ? "default" : "outline"}
+                        size="sm"
+                        aria-pressed={params.crop.aspect === o.value}
+                        onClick={() => setAspect(o.value)}
+                      >
+                        {t(o.labelKey)}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {t("editor.cropHint")}
@@ -550,6 +561,7 @@ function EditorShell({ photoId }: { photoId: string }) {
 /** A labelled slider with a live numeric readout and double-click-to-reset. */
 function AdjustSlider({
   label,
+  Icon,
   value,
   min,
   max,
@@ -557,6 +569,7 @@ function AdjustSlider({
   suffix = "",
 }: {
   label: string;
+  Icon?: LucideIcon;
   value: number;
   min: number;
   max: number;
@@ -573,7 +586,10 @@ function AdjustSlider({
       title={t("editor.doubleClickReset")}
     >
       <div className="flex items-center justify-between">
-        <Label>{label}</Label>
+        <Label className="flex items-center gap-2">
+          {Icon ? <Icon className="size-4 text-muted-foreground" /> : null}
+          {label}
+        </Label>
         <span className={cn("text-xs tabular-nums", value === neutral ? "text-muted-foreground" : "text-foreground")}>
           {value > 0 && min < 0 ? "+" : ""}
           {value}

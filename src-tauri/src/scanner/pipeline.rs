@@ -6,7 +6,6 @@
 //! transactions. Progress is emitted continuously so the UI shows a real
 //! progress bar rather than a spinner.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
@@ -201,7 +200,7 @@ fn index_one(
         (Some(c), Some(m)) => Some(c.min(m)),
         (c, m) => c.or(m),
     });
-    let hash = hash_file(path).ok();
+    let hash = crate::core::hash::hash_file(path).ok();
 
     // Thumbnail. Standard rasters, camera RAW (embedded preview) and video
     // (ffmpeg poster frame) are all attempted; anything that still can't be
@@ -253,22 +252,6 @@ fn index_one(
         thumb_path,
         tags: Vec::new(),
     })
-}
-
-/// Stream a file through SHA-256 for integrity/dedupe.
-fn hash_file(path: &Path) -> Result<String> {
-    use sha2::{Digest, Sha256};
-    let mut file = std::fs::File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
-    loop {
-        let n = file.read(&mut buf)?;
-        if n == 0 {
-            break;
-        }
-        hasher.update(&buf[..n]);
-    }
-    Ok(format!("{:x}", hasher.finalize()))
 }
 
 /// The single writer: batches results into transactions and streams progress.

@@ -164,13 +164,37 @@ pub async fn preview_import_tree(paths: Vec<String>) -> Result<Vec<FolderPreview
     .await
 }
 
+/// Every directory under `root` (including `root`), ordered ancestors-first.
+/// Used by mirror mode to build a 1:1 album tree with no depth clamp.
+fn all_dirs(root: &Path) -> std::collections::BTreeSet<PathBuf> {
+    let mut dirs = std::collections::BTreeSet::new();
+    dirs.insert(root.to_path_buf());
+    for entry in WalkDir::new(root)
+        .follow_links(false)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        if entry.file_type().is_dir() {
+            dirs.insert(entry.path().to_path_buf());
+        }
+    }
+    dirs
+}
+
 /// Import folders, building a nested album hierarchy mirroring the on-disk tree
 /// and scheduling a scan that assigns each scanned photo to its folder's album.
+///
+/// With `mirror == false` this creates purely virtual albums (folder_path NULL)
+/// clamped to [`MAX_ALBUM_DEPTH`], the historical behaviour. With `mirror == true`
+/// it builds a 1:1, unclamped album tree where each album records the on-disk
+/// directory it represents (`folder_path`) and the root is marked as a mirror,
+/// so later album edits propagate to disk and Explorer changes reconcile back.
 #[tauri::command]
 pub async fn import_as_albums(
     state: State<'_, SharedState>,
     paths: Vec<String>,
     root_names: Vec<String>,
+    mirror: bool,
 ) -> Result<()> {
     let state = Arc::clone(&state);
     blocking(move || {
@@ -189,37 +213,79 @@ pub async fn import_as_albums(
                         .unwrap_or(p.as_str())
                         .to_string()
                 });
-            let counts = media_counts(&root);
-            let layout = album_layout(&root, &counts);
-            let mut folder_to_album: HashMap<PathBuf, String> = HashMap::new();
-            for folder in layout.keys() {
-                let name = if folder == &root {
-                    root_name.clone()
-                } else {
-                    folder
-                        .file_name()
-                        .and_then(|n| n.to_str())
-                        .unwrap_or("Album")
-                        .to_string()
-                };
-                let parent_id = if folder == &root {
-                    None
-                } else {
-                    folder
-                        .parent()
-                        .and_then(|pp| folder_to_album.get(pp))
-                        .cloned()
-                };
-                let album = albums::create(&conn, &name, parent_id.as_deref(), now())?;
-                folder_to_album.insert(folder.clone(), album.id);
-            }
-            for folder in counts.keys() {
-                let target = clamp_to_album(&root, folder);
-                if let Some(album_id) = folder_to_album.get(&target) {
+
+            if mirror {
+                // 1:1 mirror: an album for every on-disk directory, no clamp,
+                // each recording its folder_path.
+                let mut folder_to_album: HashMap<PathBuf, String> = HashMap::new();
+                for folder in all_dirs(&root) {
+                    let name = if folder == root {
+                        root_name.clone()
+                    } else {
+                        folder
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("Album")
+                            .to_string()
+                    };
+                    let parent_id = if folder == root {
+                        None
+                    } else {
+                        folder
+                            .parent()
+                            .and_then(|pp| folder_to_album.get(pp))
+                            .cloned()
+                    };
+                    let folder_str = folder.to_string_lossy().to_string();
+                    let album = albums::create_with_folder(
+                        &conn,
+                        &name,
+                        parent_id.as_deref(),
+                        Some(&folder_str),
+                        now(),
+                    )?;
+                    folder_to_album.insert(folder.clone(), album.id);
+                }
+                // Full-depth assignment: every media-holding folder maps to its
+                // own album (no clamp).
+                for (folder, album_id) in &folder_to_album {
                     assign.insert(folder.to_string_lossy().to_string(), album_id.clone());
                 }
+                folders::add(&conn, p, now())?;
+                folders::set_mirror(&conn, p, true)?;
+            } else {
+                let counts = media_counts(&root);
+                let layout = album_layout(&root, &counts);
+                let mut folder_to_album: HashMap<PathBuf, String> = HashMap::new();
+                for folder in layout.keys() {
+                    let name = if folder == &root {
+                        root_name.clone()
+                    } else {
+                        folder
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("Album")
+                            .to_string()
+                    };
+                    let parent_id = if folder == &root {
+                        None
+                    } else {
+                        folder
+                            .parent()
+                            .and_then(|pp| folder_to_album.get(pp))
+                            .cloned()
+                    };
+                    let album = albums::create(&conn, &name, parent_id.as_deref(), now())?;
+                    folder_to_album.insert(folder.clone(), album.id);
+                }
+                for folder in counts.keys() {
+                    let target = clamp_to_album(&root, folder);
+                    if let Some(album_id) = folder_to_album.get(&target) {
+                        assign.insert(folder.to_string_lossy().to_string(), album_id.clone());
+                    }
+                }
+                folders::add(&conn, p, now())?;
             }
-            folders::add(&conn, p, now())?;
         }
         let roots: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
         state.scanner.spawn_scan_with_albums(roots, assign);

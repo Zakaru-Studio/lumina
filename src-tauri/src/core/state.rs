@@ -10,6 +10,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tauri::AppHandle;
 
+use crate::backup::BackupManager;
 use crate::core::config::{AppConfig, Paths};
 use crate::database::Database;
 use crate::scanner::ScanManager;
@@ -29,6 +30,8 @@ pub struct AppState {
     pub scanner: Arc<ScanManager>,
     /// Thumbnail generation + LRU byte cache.
     pub thumbnails: Arc<ThumbnailService>,
+    /// Background device-backup manager.
+    pub backup: Arc<BackupManager>,
 }
 
 impl AppState {
@@ -39,6 +42,7 @@ impl AppState {
         paths: Arc<RwLock<Paths>>,
         scanner: Arc<ScanManager>,
         thumbnails: Arc<ThumbnailService>,
+        backup: Arc<BackupManager>,
     ) -> Self {
         Self {
             app,
@@ -47,6 +51,7 @@ impl AppState {
             paths,
             scanner,
             thumbnails,
+            backup,
         }
     }
 

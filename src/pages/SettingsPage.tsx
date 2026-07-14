@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { getVersion } from "@tauri-apps/api/app";
 import {
   FolderOpen,
+  HardDriveDownload,
   Plus,
   RefreshCw,
   Sparkles,
@@ -29,11 +30,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { useAiStatus, useConfig, useUpdateConfig } from "@/hooks/useSettings";
 import { useLibraryStats } from "@/hooks/usePhotos";
 import { useScanControls, useWatchedFolders } from "@/hooks/useScan";
 import * as api from "@/lib/api";
 import { normalizeLanguage } from "@/i18n";
+import { useBackupDevice } from "@/stores/backupDeviceStore";
 import { useUiStore, type DeletePreference } from "@/stores/uiStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { AppConfig, Theme } from "@/types";
@@ -133,6 +136,18 @@ export function SettingsPage() {
   const save = (partial: Partial<AppConfig>) => {
     if (!config) return;
     updateConfig.mutate({ ...config, ...partial });
+  };
+
+  /** Manually look for a connected device and open the backup prompt for it.
+   * Discoverable fallback when auto-detection missed the arrival (e.g. the
+   * device was plugged in before launch). */
+  const backUpDeviceNow = async () => {
+    const devices = await api.listRemovableDevices().catch(() => []);
+    if (devices.length === 0) {
+      toast(t("settings.backup.noDevice"));
+      return;
+    }
+    useBackupDevice.getState().open(devices[0]);
   };
 
   /** Regenerate all thumbnails at the current configured size (progress shown
@@ -282,6 +297,27 @@ export function SettingsPage() {
           </Row>
         </Section>
 
+        {/* Folder management */}
+        <Section
+          title={t("settings.folderSync.title")}
+          description={t("settings.folderSync.description")}
+        >
+          <Row label={t("settings.folderSync.mode")} hint={t("settings.folderSync.modeHint")}>
+            <Select
+              value={config.folderSyncMode ?? undefined}
+              onValueChange={(v) => save({ folderSyncMode: v })}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue placeholder={t("settings.folderSync.modeUnset")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mirror">{t("settings.folderSync.mirror")}</SelectItem>
+                <SelectItem value="virtual">{t("settings.folderSync.virtual")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Row>
+        </Section>
+
         {/* Watched folders */}
         <Section title={t("settings.folders.title")} description={t("settings.folders.description")}>
           <div className="space-y-2">
@@ -319,6 +355,46 @@ export function SettingsPage() {
             <Plus className="h-4 w-4" />
             {t("settings.folders.add")}
           </Button>
+        </Section>
+
+        {/* Device backup */}
+        <Section title={t("settings.backup.title")} description={t("settings.backup.description")}>
+          <Row
+            label={t("settings.backup.destination")}
+            hint={config.backupDestination ?? t("settings.backup.destinationUnset")}
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={async () => {
+                const picked = await api.pickFolders();
+                if (picked[0]) save({ backupDestination: picked[0] });
+              }}
+            >
+              <FolderOpen className="h-4 w-4" />
+              {t("settings.backup.choose")}
+            </Button>
+          </Row>
+          <Separator />
+          <Row label={t("settings.backup.autoPrompt")} hint={t("settings.backup.autoPromptHint")}>
+            <Switch
+              checked={config.autoBackupPrompt}
+              onCheckedChange={(v) => save({ autoBackupPrompt: v })}
+            />
+          </Row>
+          <Separator />
+          <Row label={t("settings.backup.manual")} hint={t("settings.backup.manualHint")}>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => void backUpDeviceNow()}
+            >
+              <HardDriveDownload className="h-4 w-4" />
+              {t("settings.backup.backupNow")}
+            </Button>
+          </Row>
         </Section>
 
         {/* Library stats */}

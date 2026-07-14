@@ -14,6 +14,10 @@ import type {
   AiStatus,
   Album,
   AppConfig,
+  BackupPreview,
+  BackupProgress,
+  DedupePlan,
+  DeviceInfo,
   FolderPreview,
   LibraryStats,
   MapPoint,
@@ -71,6 +75,13 @@ export const restorePhotos = (ids: string[]) =>
 export const listDuplicates = (query: PhotoQuery) =>
   invoke<Page<Photo>>("list_duplicates", { query });
 
+/**
+ * Compute a smart dedupe proposal (which copy to keep / remove per hash group).
+ * Pass `ids` to scope it to a selection (test a subset); omit for the whole catalog.
+ */
+export const dedupePlan = (ids?: string[]) =>
+  invoke<DedupePlan>("dedupe_plan", { ids: ids ?? null });
+
 /** Full ordered id list for a query (backbone of windowed browsing). */
 export const listPhotoIds = (query: PhotoQuery) =>
   invoke<string[]>("list_photo_ids", { query });
@@ -116,6 +127,14 @@ export async function pickSavePath(defaultName: string): Promise<string | null> 
   });
   return path ?? null;
 }
+
+/**
+ * Rename a media file. `newName` is the new file name (including its extension);
+ * for a mirror album the file is renamed on disk, otherwise only the catalog
+ * entry is updated.
+ */
+export const renamePhoto = (id: string, newName: string) =>
+  invoke<void>("rename_photo", { id, newName });
 
 /** Reveal a file in the OS file manager (Explorer/Finder). */
 export const revealInExplorer = (path: string) => revealItemInDir(path);
@@ -196,9 +215,29 @@ export const previewImportTree = (paths: string[]) =>
 /**
  * Register `paths` and create albums mirroring their folder trees, using
  * `rootNames[i]` as the name of the root album for `paths[i]`. Starts the scan.
+ * When `mirror` is true the roots become bidirectional folder mirrors (album
+ * edits change the on-disk folders, and Explorer changes sync back); otherwise
+ * the albums are app-only and the files/folders are never touched.
  */
-export const importAsAlbums = (paths: string[], rootNames: string[]) =>
-  invoke<void>("import_as_albums", { paths, rootNames });
+export const importAsAlbums = (paths: string[], rootNames: string[], mirror: boolean) =>
+  invoke<void>("import_as_albums", { paths, rootNames, mirror });
+
+// --- Device backup ---
+
+/** List removable devices currently connected that hold media. */
+export const listRemovableDevices = () =>
+  invoke<DeviceInfo[]>("list_removable_devices");
+
+/** Preview how many files a backup would copy vs skip (fast, path+size based). */
+export const previewBackup = (source: string, dest: string) =>
+  invoke<BackupPreview>("preview_backup", { source, dest });
+
+/** Start backing up `source` into `dest`. Progress arrives via events. */
+export const startBackup = (source: string, dest: string) =>
+  invoke<void>("start_backup", { source, dest });
+
+export const backupProgress = () =>
+  invoke<BackupProgress>("backup_progress");
 
 // --- Tags ---
 

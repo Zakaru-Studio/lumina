@@ -7,10 +7,12 @@ use tauri::State;
 
 use crate::api::{blocking, now};
 use crate::core::error::Result;
-use crate::core::models::{LibraryStats, MapPoint, Photo, ThumbStatus, TimelineSection};
+use crate::core::models::{
+    DedupePlan, LibraryStats, MapPoint, Photo, ThumbStatus, TimelineSection,
+};
 use crate::core::query::{Page, PhotoFilter, PhotoQuery};
 use crate::core::state::SharedState;
-use crate::database::photos;
+use crate::database::{folders, photos};
 use crate::thumbnail::ThumbnailService;
 
 /// List a page of photos matching a structured query.
@@ -182,6 +184,23 @@ pub async fn list_duplicates(
     .await
 }
 
+/// Compute a "smart dedupe" proposal: which copy of each duplicate set to keep
+/// and which to remove. Advisory only — the UI previews this and the user
+/// confirms before anything is removed. `ids` scopes it to a selection (test a
+/// subset); omitted, it spans the whole catalog.
+#[tauri::command]
+pub async fn dedupe_plan(
+    state: State<'_, SharedState>,
+    ids: Option<Vec<String>>,
+) -> Result<DedupePlan> {
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        photos::dedupe_plan(&conn, ids.as_deref())
+    })
+    .await
+}
+
 /// Full ordered id list for a query — the backbone for windowed browsing.
 #[tauri::command]
 pub async fn list_photo_ids(
@@ -276,6 +295,88 @@ pub async fn set_capture_date(
             }
         }
         Ok(summary)
+    })
+    .await
+}
+
+/// Rename a photo. The original file extension is always preserved (appended if
+/// the user omitted or changed it), so the name stays stable.
+///
+/// Under a MIRROR root the file itself is renamed on disk (`parent/new_name`)
+/// and the catalog row is relocated in place (id/rating/tags/album links kept;
+/// the thumbnail is keyed by id, so it is unaffected). Rejects an existing
+/// target. For a VIRTUAL (non-mirror) photo it is a catalog-only relabel: only
+/// the `filename` column changes and the file on disk is untouched.
+#[tauri::command]
+pub async fn rename_photo(
+    state: State<'_, SharedState>,
+    id: String,
+    new_name: String,
+) -> Result<()> {
+    use crate::core::error::Error;
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        let photo = photos::get(&conn, &id)?;
+
+        // Validate the requested name.
+        let requested = new_name.trim();
+        if requested.is_empty() {
+            return Err(Error::Invalid("name must not be empty".into()));
+        }
+        if requested.contains('/') || requested.contains('\\') {
+            return Err(Error::Invalid("name must not contain path separators".into()));
+        }
+
+        // Preserve the original extension: keep the requested name only if it
+        // already ends with the exact original extension; otherwise append it.
+        let old_path = std::path::PathBuf::from(&photo.path);
+        let final_name = match old_path.extension().and_then(|e| e.to_str()) {
+            Some(ext) => {
+                let has_ext = std::path::Path::new(requested)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(|e| e.eq_ignore_ascii_case(ext))
+                    .unwrap_or(false);
+                if has_ext {
+                    requested.to_string()
+                } else {
+                    format!("{requested}.{ext}")
+                }
+            }
+            None => requested.to_string(),
+        };
+
+        // Mirror root? Compare the photo's path against the active mirror roots.
+        let roots = folders::mirror_roots(&conn)?;
+        let under_mirror = crate::mirror::root_of(&photo.path, &roots).is_some();
+
+        if under_mirror {
+            let parent = old_path
+                .parent()
+                .ok_or_else(|| Error::Invalid("photo has no parent folder".into()))?;
+            let new_path = parent.join(&final_name);
+            if new_path == old_path {
+                return Ok(());
+            }
+            if new_path.exists() {
+                return Err(Error::Invalid(format!(
+                    "a file named '{final_name}' already exists here"
+                )));
+            }
+            let new_path_str = new_path.to_string_lossy().to_string();
+            // Filesystem first, then relocate the (single) catalog row in place.
+            std::fs::rename(&old_path, &new_path)?;
+            if let Err(e) = photos::relocate_prefix(&conn, &photo.path, &new_path_str) {
+                // Best-effort rollback so disk and catalog never diverge.
+                let _ = std::fs::rename(&new_path, &old_path);
+                return Err(e);
+            }
+        } else {
+            photos::set_filename(&conn, &id, &final_name)?;
+        }
+        crate::events::emit(&state.app, crate::events::names::LIBRARY_CHANGED, ());
+        Ok(())
     })
     .await
 }

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { CalendarClock, FolderMinus, FolderPlus, Heart, Plus, Trash2, X } from "lucide-react";
+import { CalendarClock, FolderMinus, FolderPlus, Heart, Plus, Trash2, Wand2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { DateTimeEditor } from "@/components/common/DateTimeEditor";
+import { DedupeButton } from "@/components/library/DedupeButton";
 import { StarRating } from "@/components/common/StarRating";
 import { Button } from "@/components/ui/button";
 import {
@@ -248,6 +249,26 @@ export function SelectionToolbar({ albums }: SelectionToolbarProps) {
             <TooltipContent>{t("selection.removeFromAlbum")}</TooltipContent>
           </Tooltip>
         ) : null}
+
+        {/* Smart-dedupe the current selection — a safe way to test the keeper
+            logic on a handful of copies before running it over the whole page. */}
+        <DedupeButton
+          ids={ids}
+          onDone={() => clear()}
+          trigger={(start, analyzing) => (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-1.5"
+              onClick={start}
+              disabled={analyzing}
+              aria-label={t("dedupe.selectionAction")}
+            >
+              <Wand2 className="h-4 w-4" />
+              {t("dedupe.button")}
+            </Button>
+          )}
+        />
 
         <Tooltip>
           <TooltipTrigger asChild>

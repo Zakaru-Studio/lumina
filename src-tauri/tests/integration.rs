@@ -229,6 +229,57 @@ fn get_album_reports_live_count() {
 }
 
 #[test]
+fn dedupe_plan_picks_best_keeper() {
+    let (_dir, db) = temp_db();
+    let conn = db.get().unwrap();
+
+    // Group 1 (hash g1): metadata must win over a cleaner name / older import.
+    let mut a = sample_photo("a", "/photos/IMG (1).jpg", "IMG (1).jpg");
+    a.hash = Some("g1".into());
+    a.imported_at = 100;
+    let mut b = sample_photo("b", "/photos/IMG.jpg", "IMG.jpg"); // clean + oldest
+    b.hash = Some("g1".into());
+    b.imported_at = 90;
+    let mut c = sample_photo("c", "/photos/IMG-copy.jpg", "IMG-copy.jpg");
+    c.hash = Some("g1".into());
+    c.rating = 5; // richest metadata → should be kept despite "copy" in name
+    c.imported_at = 110;
+
+    // Group 2 (hash g2): no metadata, so the cleaner filename wins.
+    let mut d = sample_photo("d", "/p/pic (2).png", "pic (2).png");
+    d.hash = Some("g2".into());
+    let mut e = sample_photo("e", "/p/pic.png", "pic.png"); // clean name
+    e.hash = Some("g2".into());
+
+    for p in [&a, &b, &c, &d, &e] {
+        photos::upsert(&conn, p).unwrap();
+    }
+
+    let plan = photos::dedupe_plan(&conn, None).unwrap();
+    assert_eq!(plan.total_remove, 3, "a, b and d are redundant");
+    assert_eq!(plan.groups.len(), 2);
+
+    // BTreeMap orders groups by hash: g1 then g2.
+    assert_eq!(plan.groups[0].keep.id, "c", "richest metadata kept");
+    let mut removed: Vec<_> = plan.groups[0].remove.iter().map(|p| p.id.clone()).collect();
+    removed.sort();
+    assert_eq!(removed, vec!["a", "b"]);
+
+    assert_eq!(plan.groups[1].keep.id, "e", "cleaner filename kept");
+    assert_eq!(plan.groups[1].remove.len(), 1);
+    assert_eq!(plan.groups[1].remove[0].id, "d");
+
+    // Scoped to a selection: only the g1 copies are in scope, so only that group
+    // appears. A selection containing just one copy of a pair (here only "d" of
+    // g2) yields no removals for that group.
+    let sel = ["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()];
+    let scoped = photos::dedupe_plan(&conn, Some(&sel)).unwrap();
+    assert_eq!(scoped.groups.len(), 1, "only g1 has >=2 selected copies");
+    assert_eq!(scoped.total_remove, 2);
+    assert_eq!(scoped.groups[0].keep.id, "c");
+}
+
+#[test]
 fn smart_album_favorites_filter() {
     let (_dir, db) = temp_db();
     let conn = db.get().unwrap();

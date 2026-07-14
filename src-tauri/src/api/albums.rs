@@ -47,6 +47,7 @@ pub async fn create_album(
 
 /// Move a manual album under a new parent (`None` = root) and position it at
 /// `new_index` among its siblings. Handles reparenting and reordering together.
+/// For folder-backed (mirror) albums this ALSO moves the folder on disk.
 #[tauri::command]
 pub async fn move_album(
     state: State<'_, SharedState>,
@@ -57,27 +58,52 @@ pub async fn move_album(
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;
-        albums::reparent(&conn, &id, parent_id.as_deref(), new_index)
+        let album = albums::get(&conn, &id, now())?;
+        if album.folder_path.is_some() {
+            crate::mirror::move_album(&conn, &id, parent_id.as_deref(), new_index)?;
+            crate::events::emit(&state.app, crate::events::names::LIBRARY_CHANGED, ());
+            Ok(())
+        } else {
+            albums::reparent(&conn, &id, parent_id.as_deref(), new_index)
+        }
     })
     .await
 }
 
+/// Rename an album. For folder-backed (mirror) albums this ALSO renames the
+/// folder on disk; virtual albums are a pure catalog rename.
 #[tauri::command]
 pub async fn rename_album(state: State<'_, SharedState>, id: String, name: String) -> Result<()> {
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;
-        albums::rename(&conn, &id, &name)
+        let album = albums::get(&conn, &id, now())?;
+        if album.folder_path.is_some() {
+            crate::mirror::rename_album(&conn, &id, &name)?;
+            crate::events::emit(&state.app, crate::events::names::LIBRARY_CHANGED, ());
+            Ok(())
+        } else {
+            albums::rename(&conn, &id, &name)
+        }
     })
     .await
 }
 
+/// Delete an album. For folder-backed (mirror) albums this ALSO sends the folder
+/// to the OS trash and soft-deletes its photos; virtual albums are catalog-only.
 #[tauri::command]
 pub async fn delete_album(state: State<'_, SharedState>, id: String) -> Result<()> {
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;
-        albums::delete(&conn, &id)
+        let album = albums::get(&conn, &id, now())?;
+        if album.folder_path.is_some() {
+            crate::mirror::delete_album(&conn, &id)?;
+            crate::events::emit(&state.app, crate::events::names::LIBRARY_CHANGED, ());
+            Ok(())
+        } else {
+            albums::delete(&conn, &id)
+        }
     })
     .await
 }

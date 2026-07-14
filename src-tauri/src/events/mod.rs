@@ -22,6 +22,12 @@ pub mod names {
     /// Every thumbnail was regenerated (e.g. after a size change) — the UI should
     /// bust its cached thumbnail URLs.
     pub const THUMBS_REGENERATED: &str = "thumb://regenerated";
+    /// A removable device holding media was connected ([`super::DeviceInfo`]).
+    pub const DEVICE_CONNECTED: &str = "device://connected";
+    /// Backup copy progress ([`super::BackupProgress`]).
+    pub const BACKUP_PROGRESS: &str = "backup://progress";
+    /// A backup run finished ([`super::BackupSummary`]).
+    pub const BACKUP_DONE: &str = "backup://done";
 }
 
 /// Phase of the scan pipeline, surfaced for progress UIs.
@@ -71,6 +77,47 @@ pub struct ScanSummary {
 pub struct ThumbReady {
     pub photo_id: String,
     pub thumb_path: String,
+}
+
+/// A connected removable/external device that may hold media to back up.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceInfo {
+    /// Root mount path (e.g. `E:\` on Windows).
+    pub path: String,
+    /// Human-readable volume label, or the drive letter when unavailable.
+    pub label: String,
+    /// Rough count of media files found (capped during the quick probe).
+    pub media_count: u64,
+}
+
+/// Backup copy progress payload.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupProgress {
+    /// Files processed so far (copied *or* skipped).
+    pub processed: u64,
+    /// Total files planned for this run.
+    pub total: u64,
+    /// Files actually copied so far.
+    pub copied: u64,
+    /// Files skipped as already-present (dedupe) so far.
+    pub skipped: u64,
+    /// Bytes copied so far.
+    pub bytes_copied: u64,
+    /// Current file name, for a status line.
+    pub current: Option<String>,
+}
+
+/// Emitted once a backup run completes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupSummary {
+    pub copied: u64,
+    pub skipped: u64,
+    pub failed: u64,
+    pub bytes_copied: u64,
+    pub duration_ms: u128,
 }
 
 /// Emit an event, logging (but never propagating) transport failures — a

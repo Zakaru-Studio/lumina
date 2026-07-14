@@ -41,6 +41,26 @@ pub struct AppConfig {
     pub language: String,
     /// UI theme.
     pub theme: Theme,
+    /// Destination folder (on the external drive) for USB-device backups.
+    /// `None` => not configured yet; the user is asked to pick one on first use.
+    #[serde(default)]
+    pub backup_destination: Option<String>,
+    /// Whether connecting a device with photos should auto-open the backup
+    /// prompt. Defaults to `true` via [`default_true`].
+    #[serde(default = "default_true")]
+    pub auto_backup_prompt: bool,
+    /// Default folder-management mode chosen at first import: `"mirror"` (albums
+    /// are the on-disk folders, synced both ways) or `"virtual"` (albums are
+    /// app-only, files never touched). `None` until the user picks — which is
+    /// what triggers the first-import choice modal.
+    #[serde(default)]
+    pub folder_sync_mode: Option<String>,
+}
+
+/// Serde default for boolean fields that should default to `true` when absent
+/// from a previously-persisted config blob.
+fn default_true() -> bool {
+    true
 }
 
 impl Default for AppConfig {
@@ -52,6 +72,9 @@ impl Default for AppConfig {
             worker_threads: 0,
             language: "en".to_string(),
             theme: Theme::Dark,
+            backup_destination: None,
+            auto_backup_prompt: true,
+            folder_sync_mode: None,
         }
     }
 }

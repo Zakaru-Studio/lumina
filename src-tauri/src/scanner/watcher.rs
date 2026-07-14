@@ -13,7 +13,7 @@ use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, FileI
 use tracing::{debug, info, warn};
 
 use crate::core::error::{Error, Result};
-use crate::database::photos;
+use crate::database::{folders, photos};
 use crate::events;
 use crate::metadata::Format;
 use crate::scanner::ScanManager;
@@ -60,22 +60,39 @@ pub fn spawn(manager: &Arc<ScanManager>, roots: Vec<PathBuf>) -> Result<WatchHan
 }
 
 /// Translate a debounced batch of events into scans/removals.
+///
+/// Events under a MIRROR root are routed to a (debounced-by-notify) full
+/// [`reconcile`](crate::mirror::reconcile) of that root — this folds moves,
+/// renames and folder-level changes back into the catalog by content hash,
+/// rather than the naive per-path soft-delete/scan used for non-mirror roots.
 fn handle_events(manager: &Arc<ScanManager>, events: Vec<notify_debouncer_full::DebouncedEvent>) {
+    let mirror_roots: Vec<String> = manager
+        .db()
+        .get()
+        .ok()
+        .and_then(|c| folders::mirror_roots(&c).ok())
+        .unwrap_or_default();
+
     let mut to_scan: Vec<PathBuf> = Vec::new();
+    let mut affected_mirror: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
     let mut removed = false;
 
     for event in events {
         match event.kind {
             EventKind::Remove(_) => {
                 for path in &event.event.paths {
-                    if is_supported(path) {
+                    if let Some(root) = mirror_root_of(path, &mirror_roots) {
+                        affected_mirror.insert(root);
+                    } else if is_supported(path) {
                         removed |= soft_delete_path(manager, path);
                     }
                 }
             }
             EventKind::Create(_) | EventKind::Modify(_) => {
                 for path in &event.event.paths {
-                    if path.is_file() && is_supported(path) {
+                    if let Some(root) = mirror_root_of(path, &mirror_roots) {
+                        affected_mirror.insert(root);
+                    } else if path.is_file() && is_supported(path) {
                         to_scan.push(path.clone());
                     }
                 }
@@ -91,6 +108,21 @@ fn handle_events(manager: &Arc<ScanManager>, events: Vec<notify_debouncer_full::
         debug!(count = to_scan.len(), "watcher triggering incremental scan");
         manager.spawn_scan(to_scan);
     }
+    for root in affected_mirror {
+        debug!(path = %root.display(), "watcher triggering mirror reconcile");
+        let manager = Arc::clone(manager);
+        std::thread::spawn(move || {
+            if let Err(e) = crate::mirror::reconcile(&manager, &root) {
+                warn!(error = %e, root = %root.display(), "mirror reconcile failed");
+            }
+        });
+    }
+}
+
+/// The mirror root (as a `PathBuf`) containing `path`, if any.
+fn mirror_root_of(path: &std::path::Path, roots: &[String]) -> Option<PathBuf> {
+    let p = path.to_string_lossy();
+    crate::mirror::root_of(&p, roots).map(PathBuf::from)
 }
 
 /// True when a path has a supported image/RAW extension.

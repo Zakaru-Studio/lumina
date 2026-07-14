@@ -6,10 +6,12 @@
 
 pub mod ai;
 pub mod api;
+pub mod backup;
 pub mod core;
 pub mod database;
 pub mod events;
 pub mod metadata;
+pub mod mirror;
 pub mod scanner;
 pub mod search;
 pub mod thumbnail;
@@ -78,6 +80,15 @@ fn bootstrap(app: &tauri::App) -> Result<Arc<AppState>> {
         handle.clone(),
     ));
 
+    let backup = Arc::new(crate::backup::BackupManager::new(
+        db.clone(),
+        Arc::clone(&scanner),
+        handle.clone(),
+    ));
+
+    // Watch for removable devices holding media and offer to back them up.
+    crate::backup::device::start(handle.clone(), Arc::clone(&config_lock));
+
     let state = AppState::new(
         handle,
         db,
@@ -85,31 +96,56 @@ fn bootstrap(app: &tauri::App) -> Result<Arc<AppState>> {
         paths_lock,
         Arc::clone(&scanner),
         thumbnails,
+        backup,
     );
     Ok(Arc::new(state))
 }
 
 /// On startup, resume watching existing folders and pick up any new files.
+/// Mirror roots reconcile (offline changes folded in by content hash) on a
+/// background thread; non-mirror roots get the plain incremental scan.
 fn resume_background_work(state: &Arc<AppState>) {
-    let roots: Vec<PathBuf> = match state.db.get() {
-        Ok(conn) => folders::list(&conn)
-            .map(|list| {
-                list.into_iter()
-                    .filter(|f| f.active)
-                    .map(|f| PathBuf::from(f.path))
-                    .collect()
-            })
-            .unwrap_or_default(),
+    let (active_roots, mirror_roots): (Vec<PathBuf>, Vec<PathBuf>) = match state.db.get() {
+        Ok(conn) => {
+            let active = folders::list(&conn)
+                .map(|list| {
+                    list.into_iter()
+                        .filter(|f| f.active)
+                        .map(|f| PathBuf::from(f.path))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let mirror = folders::mirror_roots(&conn)
+                .map(|list| list.into_iter().map(PathBuf::from).collect::<Vec<_>>())
+                .unwrap_or_default();
+            (active, mirror)
+        }
         Err(e) => {
             warn!(error = %e, "cannot list watched folders at startup");
-            Vec::new()
+            (Vec::new(), Vec::new())
         }
     };
-    if roots.is_empty() {
+    if active_roots.is_empty() {
         return;
     }
-    state.scanner.start_watching(roots.clone());
-    state.scanner.spawn_scan(roots);
+    state.scanner.start_watching(active_roots.clone());
+
+    let mirror_set: std::collections::HashSet<PathBuf> = mirror_roots.iter().cloned().collect();
+    let non_mirror: Vec<PathBuf> = active_roots
+        .into_iter()
+        .filter(|r| !mirror_set.contains(r))
+        .collect();
+    if !non_mirror.is_empty() {
+        state.scanner.spawn_scan(non_mirror);
+    }
+    for root in mirror_roots {
+        let scanner = Arc::clone(&state.scanner);
+        std::thread::spawn(move || {
+            if let Err(e) = crate::mirror::reconcile(&scanner, &root) {
+                warn!(error = %e, root = %root.display(), "startup mirror reconcile failed");
+            }
+        });
+    }
 }
 
 /// Entry point: build and run the Tauri application.
@@ -142,10 +178,12 @@ pub fn run() {
             api::photos::delete_photos_from_disk,
             api::photos::restore_photos,
             api::photos::list_duplicates,
+            api::photos::dedupe_plan,
             api::photos::list_photo_ids,
             api::photos::save_edited_image,
             api::photos::overwrite_original,
             api::photos::set_capture_date,
+            api::photos::rename_photo,
             // thumbnails
             api::thumbnails::thumbnail_path,
             api::thumbnails::ensure_thumbnail,
@@ -178,6 +216,11 @@ pub fn run() {
             // import as albums
             api::import::preview_import_tree,
             api::import::import_as_albums,
+            // device backup
+            api::backup::list_removable_devices,
+            api::backup::preview_backup,
+            api::backup::start_backup,
+            api::backup::backup_progress,
             // settings / ai
             api::settings::get_config,
             api::settings::update_config,

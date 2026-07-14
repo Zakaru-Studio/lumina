@@ -87,12 +87,34 @@
       "workersAuto": "Auto",
       "workersCount": "{{n}} threads"
     },
+    "folderSync": {
+      "title": "Gestion des dossiers",
+      "description": "Relation entre les albums et les dossiers de votre disque.",
+      "mode": "Mode",
+      "modeHint": "Le mode miroir garde albums et dossiers synchronisés ; le mode app seule ne touche jamais à vos fichiers.",
+      "modeUnset": "Non défini",
+      "mirror": "Miroir",
+      "virtual": "App seule (virtuel)"
+    },
     "folders": {
       "title": "Dossiers surveillés",
       "description": "Dossiers que Lumina indexe et surveille.",
       "empty": "Aucun dossier pour l'instant.",
       "removeAria": "Retirer le dossier",
       "add": "Ajouter un dossier…"
+    },
+    "backup": {
+      "title": "Sauvegarde des appareils",
+      "description": "Enregistrer les photos des appareils connectés sur un disque externe.",
+      "destination": "Disque de sauvegarde",
+      "destinationUnset": "Non défini",
+      "choose": "Choisir",
+      "autoPrompt": "Proposer au branchement",
+      "autoPromptHint": "Proposer la sauvegarde quand un appareil avec des photos est branché.",
+      "manual": "Sauvegarder maintenant",
+      "manualHint": "Chercher un appareil connecté et lancer une sauvegarde.",
+      "backupNow": "Sauvegarder un appareil",
+      "noDevice": "Aucun appareil connecté avec des photos n'a été trouvé."
     },
     "library": {
       "title": "Bibliothèque",
@@ -135,11 +157,14 @@
     "smartAlbums": "Albums intelligents",
     "myAlbums": "Mes albums",
     "createAlbum": "Nouvel album",
+    "collapseAll": "Réduire tous les albums",
+    "expandAll": "Développer tous les albums",
     "moveToRoot": "Déplacer à la racine",
     "tags": "Tags",
     "importFolders": "Importer des dossiers",
     "renameAlbum": "Renommer",
     "deleteAlbum": "Supprimer",
+    "mirrorAlbum": "Album miroir (synchronisé avec un dossier)",
     "toggleSidebar": "Afficher/masquer la barre latérale",
     "searchPill": "Rechercher…",
     "selectedCount": "{{n}} sélectionné(s)"
@@ -152,8 +177,55 @@
     "importOnly": "Importer seulement",
     "loading": "Analyse des dossiers…",
     "createdToast": "Albums créés",
+    "mirrorLabel": "Dossier miroir (synchroniser avec l'Explorateur)",
+    "mirrorHint": "Garde ces albums synchronisés avec les dossiers du disque, dans les deux sens. Renommer, déplacer ou supprimer un album modifie les vrais dossiers.",
     "mediaCount_one": "{{count}} média",
     "mediaCount_other": "{{count}} médias"
+  },
+  "folderSync": {
+    "title": "Comment Lumina doit-il gérer vos dossiers ?",
+    "description": "Choisissez la relation entre les albums et les dossiers de votre disque. Vous pourrez changer cela plus tard dans les Réglages.",
+    "mirror": {
+      "title": "Miroir 100 %",
+      "description": "Les albums SONT vos dossiers sur le disque. Renommer, déplacer ou supprimer un album modifie les vrais dossiers, et les changements faits dans l'Explorateur sont répercutés dans Lumina."
+    },
+    "virtual": {
+      "title": "Albums gérés dans l'app",
+      "description": "Les albums n'existent que dans Lumina. Vos fichiers et dossiers ne sont jamais déplacés, renommés ni supprimés."
+    },
+    "changeLater": "Vous pouvez changer de mode à tout moment depuis les Réglages."
+  },
+  "rename": {
+    "title": "Renommer",
+    "placeholder": "Nom du fichier"
+  },
+  "mirrorDelete": {
+    "title": "Supprimer ce dossier ?",
+    "description": "« {{name}} » est un album miroir. Le supprimer déplace le dossier et tout son contenu vers la corbeille. Vous pourrez les restaurer depuis celle-ci.",
+    "confirm": "Déplacer vers la corbeille"
+  },
+  "backup": {
+    "title": "Sauvegarder {{label}} ?",
+    "description_one": "Cet appareil contient {{count}} photo. Les nouvelles sont copiées sur votre disque de sauvegarde ; les photos déjà enregistrées sont ignorées.",
+    "description_other": "Cet appareil contient {{count}} photos. Les nouvelles sont copiées sur votre disque de sauvegarde ; les photos déjà enregistrées sont ignorées.",
+    "chooseDestination": "Choisir le disque de sauvegarde",
+    "changeDestination": "Changer de disque",
+    "destinationLabel": "Disque de sauvegarde",
+    "noDestination": "Choisissez le disque externe où enregistrer les photos.",
+    "analyzing": "Analyse…",
+    "previewNew_one": "{{count}} nouvelle photo",
+    "previewNew_other": "{{count}} nouvelles photos",
+    "previewSkip_one": "{{count}} déjà sauvegardée",
+    "previewSkip_other": "{{count}} déjà sauvegardées",
+    "nothingNew": "Tout est déjà sauvegardé.",
+    "start": "Sauvegarder",
+    "skip": "Ignorer",
+    "copying": "Copie…",
+    "copyingProgress": "Copie {{done}} / {{total}}",
+    "close": "Fermer",
+    "doneToast": "Sauvegarde terminée",
+    "doneSummary_one": "{{copied}} copiée · {{skipped}} ignorée",
+    "doneSummary_other": "{{copied}} copiées · {{skipped}} ignorées"
   },
   "command": {
     "placeholder": "Rechercher des photos ou naviguer…",
@@ -238,7 +310,8 @@
     "editDateUnsupported": "Modification de la date indisponible pour ce format (RAW/vidéo)",
     "dimensions": "Dimensions",
     "size": "Taille",
-    "folder": "Dossier"
+    "folder": "Dossier",
+    "editImage": "Éditer l'image"
   },
   "editor": {
     "editing": "Édition…",
@@ -403,5 +476,23 @@
       "east": "E",
       "west": "O"
     }
+  },
+  "dedupe": {
+    "button": "Dédoublonner",
+    "analyzing": "Analyse…",
+    "title": "Dédoublonnage intelligent",
+    "summary": "{{remove}} copie(s) à retirer sur {{groups}} groupe(s) de doublons. La meilleure copie de chaque groupe est conservée.",
+    "nothingToDo": "Aucun doublon à dédoublonner.",
+    "planError": "Impossible de calculer le plan de dédoublonnage",
+    "kept": "Gardé",
+    "copyCount": "{{count}} à retirer",
+    "removalMode": "Mode de suppression",
+    "modeCatalog": "Retirer du catalogue",
+    "modeTrash": "Corbeille",
+    "modeCatalogHint": "Les copies sortent de la bibliothèque ; les fichiers restent sur le disque. Annulable.",
+    "modeTrashHint": "Les fichiers en double sont déplacés vers la corbeille du système. Libère de l’espace disque.",
+    "working": "Traitement…",
+    "confirm": "Retirer {{count}} copie(s)",
+    "selectionAction": "Dédoublonner la sélection"
   }
 }

@@ -47,7 +47,7 @@ pub fn seed_smart_albums(conn: &Connection, now: i64) -> Result<()> {
 /// List all albums with counts (manual: membership; smart: evaluated).
 pub fn list(conn: &Connection, now: i64) -> Result<Vec<Album>> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, kind, rule, icon, sort_order, created_at, parent_id FROM albums \
+        "SELECT id, name, kind, rule, icon, sort_order, created_at, parent_id, folder_path FROM albums \
          ORDER BY kind DESC, sort_order ASC, name COLLATE NOCASE",
     )?;
     let rows = stmt.query_map([], |r| {
@@ -62,6 +62,7 @@ pub fn list(conn: &Connection, now: i64) -> Result<Vec<Album>> {
                 sort_order: r.get(5)?,
                 created_at: r.get(6)?,
                 parent_id: r.get(7)?,
+                folder_path: r.get(8)?,
                 count: 0,
             },
             rule_str,
@@ -112,7 +113,7 @@ pub fn get(conn: &Connection, id: &str, now: i64) -> Result<Album> {
     let rule_str: Option<String>;
     let mut album = conn
         .query_row(
-            "SELECT id, name, kind, rule, icon, sort_order, created_at, parent_id FROM albums WHERE id = ?1",
+            "SELECT id, name, kind, rule, icon, sort_order, created_at, parent_id, folder_path FROM albums WHERE id = ?1",
             params![id],
             |r| {
                 Ok(Album {
@@ -124,6 +125,7 @@ pub fn get(conn: &Connection, id: &str, now: i64) -> Result<Album> {
                     sort_order: r.get(5)?,
                     created_at: r.get(6)?,
                     parent_id: r.get(7)?,
+                    folder_path: r.get(8)?,
                     count: 0,
                 })
             },
@@ -142,11 +144,26 @@ pub fn get(conn: &Connection, id: &str, now: i64) -> Result<Album> {
     Ok(album)
 }
 
-/// Create a manual album, optionally nested under `parent_id`.
+/// Create a manual album, optionally nested under `parent_id`. Virtual album:
+/// `folder_path` is left NULL (see [`create_with_folder`] for mirror albums).
 pub fn create(
     conn: &Connection,
     name: &str,
     parent_id: Option<&str>,
+    now: i64,
+) -> Result<Album> {
+    create_with_folder(conn, name, parent_id, None, now)
+}
+
+/// Create a manual album, optionally nested under `parent_id`, recording the
+/// on-disk directory it mirrors in `folder_path` (`None` = a virtual album).
+/// Mirror-tree imports and reconciliation use the `Some(..)` form so structural
+/// album ops can later propagate to disk.
+pub fn create_with_folder(
+    conn: &Connection,
+    name: &str,
+    parent_id: Option<&str>,
+    folder_path: Option<&str>,
     now: i64,
 ) -> Result<Album> {
     let name = name.trim();
@@ -166,9 +183,9 @@ pub fn create(
     )?;
     let id = uuid::Uuid::new_v4().to_string();
     conn.execute(
-        "INSERT INTO albums (id, name, kind, rule, icon, sort_order, created_at, parent_id) \
-         VALUES (?1, ?2, 'manual', NULL, 'folder', ?3, ?4, ?5)",
-        params![id, name, sort_order, now, parent_id],
+        "INSERT INTO albums (id, name, kind, rule, icon, sort_order, created_at, parent_id, folder_path) \
+         VALUES (?1, ?2, 'manual', NULL, 'folder', ?3, ?4, ?5, ?6)",
+        params![id, name, sort_order, now, parent_id, folder_path],
     )?;
     Ok(Album {
         id,
@@ -179,6 +196,7 @@ pub fn create(
         sort_order,
         created_at: now,
         parent_id: parent_id.map(str::to_string),
+        folder_path: folder_path.map(str::to_string),
         count: 0,
     })
 }
@@ -286,6 +304,103 @@ pub fn delete(conn: &Connection, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Row-mapper for a fully-projected album row (see the shared column list).
+fn map_album(r: &rusqlite::Row) -> rusqlite::Result<Album> {
+    Ok(Album {
+        id: r.get(0)?,
+        name: r.get(1)?,
+        kind: AlbumKind::from_str_lenient(&r.get::<_, String>(2)?),
+        rule: None,
+        icon: r.get(4)?,
+        sort_order: r.get(5)?,
+        created_at: r.get(6)?,
+        parent_id: r.get(7)?,
+        folder_path: r.get(8)?,
+        count: 0,
+    })
+}
+
+/// All mirror albums whose `folder_path` is exactly `root` or nested under it.
+/// Ordered by path so ancestors precede descendants. Uses a byte-range over the
+/// `folder_path` index (mirrors [`crate::database::photos::by_path_prefix`]) so
+/// `_`/`%`/separators in folder names can't cause false matches.
+pub fn mirror_albums_under(conn: &Connection, root: &str) -> Result<Vec<Album>> {
+    let sep = std::path::MAIN_SEPARATOR;
+    let low = format!("{root}{sep}");
+    let high = format!("{root}{}", ((sep as u8) + 1) as char);
+    let sql =
+        "SELECT id, name, kind, rule, icon, sort_order, created_at, parent_id, folder_path \
+         FROM albums \
+         WHERE folder_path IS NOT NULL AND (folder_path = ?1 OR (folder_path >= ?2 AND folder_path < ?3)) \
+         ORDER BY folder_path";
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(params![root, low, high], map_album)?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
+/// Rename a mirror album's own name and rewrite the `folder_path` of the album
+/// at exactly `old_prefix` plus every descendant mirror album whose
+/// `folder_path` is nested under it (`old_prefix` → `new_prefix`). Keeps the
+/// album tree's stored paths in lock-step with a folder rename/move on disk.
+pub fn relocate_folder_prefix(conn: &Connection, old_prefix: &str, new_prefix: &str) -> Result<()> {
+    let affected = mirror_albums_under(conn, old_prefix)?;
+    let tx = conn.unchecked_transaction()?;
+    for a in &affected {
+        let Some(fp) = a.folder_path.as_deref() else {
+            continue;
+        };
+        // `old_prefix` is a byte-prefix of `fp` (guaranteed by the range query).
+        let rest = &fp[old_prefix.len()..];
+        let new_fp = format!("{new_prefix}{rest}");
+        tx.execute(
+            "UPDATE albums SET folder_path = ?2 WHERE id = ?1",
+            params![a.id, new_fp],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Collect an album id and every descendant (via `parent_id`), breadth-first.
+pub fn subtree_ids(conn: &Connection, id: &str) -> Result<Vec<String>> {
+    let mut out = vec![id.to_string()];
+    let mut frontier = vec![id.to_string()];
+    while let Some(cur) = frontier.pop() {
+        let mut stmt =
+            conn.prepare("SELECT id FROM albums WHERE parent_id = ?1 AND kind = 'manual'")?;
+        let kids = stmt
+            .query_map(params![cur], |r| r.get::<_, String>(0))?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        for k in kids {
+            out.push(k.clone());
+            frontier.push(k);
+        }
+    }
+    Ok(out)
+}
+
+/// Delete a manual album and its entire subtree (children are deleted rather
+/// than promoted to root — the parent FK is `ON DELETE SET NULL`). Membership
+/// links cascade. Returns the number of album rows removed.
+pub fn delete_with_descendants(conn: &Connection, id: &str) -> Result<usize> {
+    let ids = subtree_ids(conn, id)?;
+    let tx = conn.unchecked_transaction()?;
+    let mut n = 0;
+    // Delete leaves first (reverse of the BFS order) to avoid transient promotion.
+    for aid in ids.iter().rev() {
+        n += tx.execute(
+            "DELETE FROM albums WHERE id = ?1 AND kind = 'manual'",
+            params![aid],
+        )?;
+    }
+    tx.commit()?;
+    Ok(n)
+}
+
 /// Add photos to a manual album (idempotent).
 pub fn add_photos(conn: &Connection, album_id: &str, photo_ids: &[String], now: i64) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
@@ -314,6 +429,33 @@ pub fn assign_by_folder(
             params![album_id, folder, now],
         )?;
     }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Make a folder-backed (mirror) album's membership EXACTLY the live photos whose
+/// `folder` equals `folder_path` — authoritative, unlike the additive
+/// [`assign_by_folder`]. Used by reconciliation so a photo moved between folders
+/// in Explorer ends up in its new folder's album and is dropped from the old one.
+pub fn resync_folder_album(
+    conn: &Connection,
+    album_id: &str,
+    folder_path: &str,
+    now: i64,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    // Drop members that are no longer live photos directly in this folder.
+    tx.execute(
+        "DELETE FROM album_photos WHERE album_id = ?1 AND photo_id NOT IN \
+         (SELECT id FROM photos WHERE folder = ?2 AND deleted_at IS NULL)",
+        params![album_id, folder_path],
+    )?;
+    // Add every live photo now in this folder.
+    tx.execute(
+        "INSERT OR IGNORE INTO album_photos (album_id, photo_id, added_at) \
+         SELECT ?1, id, ?3 FROM photos WHERE folder = ?2 AND deleted_at IS NULL",
+        params![album_id, folder_path, now],
+    )?;
     tx.commit()?;
     Ok(())
 }

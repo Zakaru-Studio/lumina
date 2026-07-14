@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { FolderInput, PanelLeft, Search } from "lucide-react";
 
 import { ThemeToggle } from "@/components/common/ThemeToggle";
+import { UpdateBadge } from "@/components/updater/UpdateBadge";
 import { WindowControls } from "@/components/layout/WindowControls";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,7 @@ export function TopBar() {
             {t("shell.selectedCount", { n: selectedCount })}
           </Badge>
         ) : null}
+        <UpdateBadge />
         <ThemeToggle />
       </div>
 
