@@ -16,13 +16,18 @@ use crate::database::photos;
 
 /// Ensure the built-in smart albums exist. Idempotent — safe to call at boot.
 pub fn seed_smart_albums(conn: &Connection, now: i64) -> Result<()> {
+    // Drop the deprecated built-in RAW smart album (superseded by the RAW filter
+    // in the library). Harmless when absent; also removes it for existing DBs.
+    conn.execute(
+        "DELETE FROM albums WHERE kind = 'smart' AND json_extract(rule, '$.preset') = 'raw'",
+        [],
+    )?;
     // (name, icon, preset, sort_order)
     const DEFAULTS: &[(&str, &str, &str, i64)] = &[
         ("Today", "sun", "today", 0),
         ("This Week", "calendar-days", "week", 1),
         ("This Month", "calendar", "month", 2),
         ("Favorites", "heart", "favorites", 3),
-        ("RAW", "aperture", "raw", 4),
         ("Videos", "video", "videos", 5),
         ("Duplicates", "copy", "duplicates", 6),
     ];
@@ -64,6 +69,7 @@ pub fn list(conn: &Connection, now: i64) -> Result<Vec<Album>> {
                 parent_id: r.get(7)?,
                 folder_path: r.get(8)?,
                 count: 0,
+                cover_thumb_path: None,
             },
             rule_str,
         ))
@@ -76,6 +82,7 @@ pub fn list(conn: &Connection, now: i64) -> Result<Vec<Album>> {
             .as_deref()
             .and_then(|s| serde_json::from_str(s).ok());
         album.count = count_of(conn, &album, now)?;
+        album.cover_thumb_path = cover_of(conn, &album, now)?;
         out.push(album);
     }
     Ok(out)
@@ -108,6 +115,34 @@ fn count_of(conn: &Connection, album: &Album, now: i64) -> Result<i64> {
     })
 }
 
+/// Resolve an album's representative cover thumbnail: the newest live photo's
+/// thumb for a manual album (by membership) or a smart album (via the resolved
+/// filter, or the dedicated hash grouping for Duplicates). Mirrors [`count_of`]
+/// so [`list`] and [`get`] surface a consistent cover.
+fn cover_of(conn: &Connection, album: &Album, now: i64) -> Result<Option<String>> {
+    match album.kind {
+        AlbumKind::Manual => photos::cover_thumb(
+            conn,
+            &PhotoFilter {
+                album_id: Some(album.id.clone()),
+                ..Default::default()
+            },
+        ),
+        AlbumKind::Smart => {
+            if preset_of(album) == Some("duplicates") {
+                photos::duplicates_cover_thumb(conn)
+            } else {
+                let filter = album
+                    .rule
+                    .as_ref()
+                    .map(|r| resolve_smart_filter(r, now))
+                    .unwrap_or_default();
+                photos::cover_thumb(conn, &filter)
+            }
+        }
+    }
+}
+
 /// Fetch a single album by id, with its live photo count.
 pub fn get(conn: &Connection, id: &str, now: i64) -> Result<Album> {
     let rule_str: Option<String>;
@@ -127,6 +162,7 @@ pub fn get(conn: &Connection, id: &str, now: i64) -> Result<Album> {
                     parent_id: r.get(7)?,
                     folder_path: r.get(8)?,
                     count: 0,
+                    cover_thumb_path: None,
                 })
             },
         )
@@ -141,6 +177,7 @@ pub fn get(conn: &Connection, id: &str, now: i64) -> Result<Album> {
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok());
     album.count = count_of(conn, &album, now)?;
+    album.cover_thumb_path = cover_of(conn, &album, now)?;
     Ok(album)
 }
 
@@ -198,6 +235,7 @@ pub fn create_with_folder(
         parent_id: parent_id.map(str::to_string),
         folder_path: folder_path.map(str::to_string),
         count: 0,
+        cover_thumb_path: None,
     })
 }
 
@@ -317,6 +355,7 @@ fn map_album(r: &rusqlite::Row) -> rusqlite::Result<Album> {
         parent_id: r.get(7)?,
         folder_path: r.get(8)?,
         count: 0,
+        cover_thumb_path: None,
     })
 }
 

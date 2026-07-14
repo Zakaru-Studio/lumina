@@ -54,6 +54,10 @@ pub struct PhotoFilter {
     pub lens: Option<String>,
     /// Restrict to a folder prefix.
     pub folder: Option<String>,
+    /// Restrict to photos whose reverse-geocoded place (city/region/country,
+    /// from the `geocache`) contains this text. Only matches geolocated photos
+    /// whose coordinate has already been resolved.
+    pub place: Option<String>,
     /// Inclusive `taken_at` lower bound (Unix seconds).
     pub date_from: Option<i64>,
     /// Inclusive `taken_at` upper bound (Unix seconds).
@@ -63,6 +67,9 @@ pub struct PhotoFilter {
     pub tags: Vec<String>,
     /// Restrict to members of this album.
     pub album_id: Option<String>,
+    /// Restrict to photos containing this person (face cluster).
+    #[serde(default)]
+    pub person_id: Option<String>,
 }
 
 /// A page request: structured filter + sort + window.

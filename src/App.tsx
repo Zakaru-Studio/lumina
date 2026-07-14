@@ -11,10 +11,11 @@ import { LibraryPage } from "@/pages/LibraryPage";
 // vectors + d3-geo. A shared <Suspense> lives in AppShell around the routed
 // <Outlet>, so no per-route boilerplate is needed here.
 const TimelinePage = lazy(() => import("@/pages/TimelinePage").then((m) => ({ default: m.TimelinePage })));
-const SearchPage = lazy(() => import("@/pages/SearchPage").then((m) => ({ default: m.SearchPage })));
 const MapPage = lazy(() => import("@/pages/MapPage").then((m) => ({ default: m.MapPage })));
 const AlbumsPage = lazy(() => import("@/pages/AlbumsPage").then((m) => ({ default: m.AlbumsPage })));
 const AlbumDetailPage = lazy(() => import("@/pages/AlbumDetailPage").then((m) => ({ default: m.AlbumDetailPage })));
+const PeoplePage = lazy(() => import("@/pages/PeoplePage").then((m) => ({ default: m.PeoplePage })));
+const PersonDetailPage = lazy(() => import("@/pages/PersonDetailPage").then((m) => ({ default: m.PersonDetailPage })));
 const SettingsPage = lazy(() => import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
 /**
@@ -37,9 +38,10 @@ export default function App() {
           <Route index element={<LibraryPage />} />
           <Route path="timeline" element={<TimelinePage />} />
           <Route path="map" element={<MapPage />} />
-          <Route path="search" element={<SearchPage />} />
           <Route path="albums" element={<AlbumsPage />} />
           <Route path="albums/:albumId" element={<AlbumDetailPage />} />
+          <Route path="people" element={<PeoplePage />} />
+          <Route path="people/:personId" element={<PersonDetailPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Routes>

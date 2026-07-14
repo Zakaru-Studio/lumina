@@ -69,6 +69,68 @@ export function applyWarmth(img: ImageData, amount: number): void {
 }
 
 /**
+ * Tonal-region adjustments — highlights, shadows, whites and blacks — as a
+ * luminance-weighted additive shift applied equally to R/G/B (so hue is
+ * preserved). All four share a single pass via a 256-entry delta LUT keyed on
+ * luminance, so cost is O(n) no matter how many are engaged. Each amount is
+ * −100..100 (0 neutral); the pass is skipped entirely when all four are 0.
+ *
+ * Weights isolate each region by luminance `t` (0..1): shadows lift the lower
+ * half `(1−t)²`, highlights the upper half `t²`, with whites/blacks the same
+ * curves raised to the 4th power so they bite only at the extremes.
+ */
+export function applyTones(
+  img: ImageData,
+  highlights: number,
+  shadows: number,
+  whites: number,
+  blacks: number,
+): void {
+  if (!highlights && !shadows && !whites && !blacks) return;
+  // Max additive shift (in 8-bit levels) at full weight for a ±100 control.
+  const hAmt = (highlights / 100) * 90;
+  const sAmt = (shadows / 100) * 90;
+  const wAmt = (whites / 100) * 90;
+  const bAmt = (blacks / 100) * 90;
+  // Precompute the per-luminance delta once (256 entries).
+  const lut = new Float32Array(256);
+  for (let l = 0; l < 256; l++) {
+    const t = l / 255;
+    const shadowW = (1 - t) * (1 - t); // (1−t)²
+    const highlightW = t * t; // t²
+    lut[l] =
+      sAmt * shadowW +
+      hAmt * highlightW +
+      bAmt * shadowW * shadowW + // (1−t)⁴ — near-black only
+      wAmt * highlightW * highlightW; // t⁴ — near-white only
+  }
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    // Rec.601 luma; the weights sum to 1 so the index stays within 0..255.
+    const l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0;
+    const delta = lut[l];
+    if (delta === 0) continue;
+    d[i] = clamp8(d[i] + delta);
+    d[i + 1] = clamp8(d[i + 1] + delta);
+    d[i + 2] = clamp8(d[i + 2] + delta);
+  }
+}
+
+/**
+ * Tint — a green ↔ magenta shift on the axis complementary to warmth. Positive
+ * pushes magenta (removes green), negative pushes green. `amount` is −100..100,
+ * max shift ±32 levels on the green channel.
+ */
+export function applyTint(img: ImageData, amount: number): void {
+  if (!amount) return;
+  const shift = (amount / 100) * 32;
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    d[i + 1] = clamp8(d[i + 1] - shift); // G
+  }
+}
+
+/**
  * Vibrance — a "smart" saturation boost. Unlike flat saturation, the boost is
  * weighted by `1 − currentSaturation`, so already-vivid pixels move far less
  * than muted ones (protecting skin tones and avoiding clipping). `amount` is

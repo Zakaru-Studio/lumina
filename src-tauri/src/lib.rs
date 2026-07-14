@@ -10,6 +10,7 @@ pub mod backup;
 pub mod core;
 pub mod database;
 pub mod events;
+pub mod geocode;
 pub mod metadata;
 pub mod mirror;
 pub mod scanner;
@@ -86,6 +87,13 @@ fn bootstrap(app: &tauri::App) -> Result<Arc<AppState>> {
         handle.clone(),
     ));
 
+    let faces = Arc::new(crate::ai::face::FaceManager::new(
+        db.clone(),
+        Arc::clone(&config_lock),
+        Arc::clone(&paths_lock),
+        handle.clone(),
+    ));
+
     // Watch for removable devices holding media and offer to back them up.
     crate::backup::device::start(handle.clone(), Arc::clone(&config_lock));
 
@@ -97,6 +105,7 @@ fn bootstrap(app: &tauri::App) -> Result<Arc<AppState>> {
         Arc::clone(&scanner),
         thumbnails,
         backup,
+        faces,
     );
     Ok(Arc::new(state))
 }
@@ -105,6 +114,11 @@ fn bootstrap(app: &tauri::App) -> Result<Arc<AppState>> {
 /// Mirror roots reconcile (offline changes folded in by content hash) on a
 /// background thread; non-mirror roots get the plain incremental scan.
 fn resume_background_work(state: &Arc<AppState>) {
+    // Resume on-device face indexing for any photos imported previously
+    // (self-guards on the `face_recognition_enabled` setting). Independent of
+    // watched folders, so it runs before the folder-based early return below.
+    state.faces.spawn_index();
+
     let (active_roots, mirror_roots): (Vec<PathBuf>, Vec<PathBuf>) = match state.db.get() {
         Ok(conn) => {
             let active = folders::list(&conn)
@@ -181,8 +195,10 @@ pub fn run() {
             api::photos::dedupe_plan,
             api::photos::list_photo_ids,
             api::photos::save_edited_image,
+            api::photos::save_avif,
             api::photos::overwrite_original,
             api::photos::set_capture_date,
+            api::photos::set_location,
             api::photos::rename_photo,
             // thumbnails
             api::thumbnails::thumbnail_path,
@@ -221,10 +237,31 @@ pub fn run() {
             api::backup::preview_backup,
             api::backup::start_backup,
             api::backup::backup_progress,
+            // geocoding (map place names + location editor)
+            api::geocode::reverse_geocode,
+            api::geocode::geocode_search,
+            api::geocode::geocode_search_all,
+            api::geocode::list_places,
+            api::geocode::get_place,
+            api::geocode::set_place,
             // settings / ai
             api::settings::get_config,
             api::settings::update_config,
             api::settings::ai_status,
+            // faces / people
+            api::faces::face_status,
+            api::faces::set_face_recognition_enabled,
+            api::faces::index_faces_now,
+            api::faces::clear_face_data,
+            api::faces::list_people,
+            api::faces::get_person,
+            api::faces::faces_in_photo,
+            api::faces::rename_person,
+            api::faces::set_person_hidden,
+            api::faces::delete_person,
+            api::faces::merge_people,
+            api::faces::assign_faces,
+            api::faces::create_person,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Lumina");

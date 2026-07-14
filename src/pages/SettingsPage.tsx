@@ -5,10 +5,13 @@ import { getVersion } from "@tauri-apps/api/app";
 import {
   FolderOpen,
   HardDriveDownload,
+  Loader2,
   Plus,
   RefreshCw,
+  ScanFace,
   Sparkles,
   Trash2,
+  Users,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -31,12 +34,19 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Row, Section, Stat } from "@/components/common/SettingsLayout";
-import { useAiStatus, useConfig, useUpdateConfig } from "@/hooks/useSettings";
+import { useConfig, useUpdateConfig } from "@/hooks/useSettings";
+import {
+  useClearFaceData,
+  useFaceStatus,
+  useIndexFacesNow,
+  useSetFaceRecognition,
+} from "@/hooks/useFaces";
 import { useLibraryStats } from "@/hooks/usePhotos";
 import { useScanControls, useWatchedFolders } from "@/hooks/useScan";
 import * as api from "@/lib/api";
 import { normalizeLanguage } from "@/i18n";
 import { useBackupDevice } from "@/stores/backupDeviceStore";
+import { useFaceStore } from "@/stores/faceStore";
 import { useUiStore, type DeletePreference } from "@/stores/uiStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import type { AppConfig, Theme } from "@/types";
@@ -50,7 +60,12 @@ export function SettingsPage() {
   const { data: config, isLoading } = useConfig();
   const updateConfig = useUpdateConfig();
   const { data: folders = [] } = useWatchedFolders();
-  const { data: ai } = useAiStatus();
+  const { data: faceStatus } = useFaceStatus();
+  const setFaceRecognition = useSetFaceRecognition();
+  const indexFaces = useIndexFacesNow();
+  const clearFaces = useClearFaceData();
+  const faceProgress = useFaceStore((s) => s.progress);
+  const faceRunning = useFaceStore((s) => s.running);
   const { data: stats } = useLibraryStats();
   const { importFolders, removeFolder } = useScanControls();
   const { t } = useTranslation();
@@ -122,8 +137,6 @@ export function SettingsPage() {
       </div>
     );
   }
-
-  const aiDisabled = !ai?.enabled;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -365,44 +378,105 @@ export function SettingsPage() {
           </div>
         </Section>
 
-        {/* AI (coming soon) */}
+        {/* AI — on-device intelligence */}
         <Card className="border-0 bg-card">
           <CardHeader>
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
               <CardTitle className="text-base">{t("settings.ai.title")}</CardTitle>
-              {aiDisabled ? (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  {t("settings.ai.comingSoon")}
-                </span>
+            </div>
+            <CardDescription>{t("settings.ai.description")}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Face recognition — the live, on-device feature */}
+            <div className="rounded-lg border border-border/60 p-3">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 items-start gap-2.5">
+                  <ScanFace className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground">{t("settings.ai.faceTitle")}</p>
+                    <p className="text-xs text-muted-foreground">{t("settings.ai.faceDescription")}</p>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {setFaceRecognition.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : null}
+                  <Switch
+                    checked={faceStatus?.enabled ?? false}
+                    disabled={setFaceRecognition.isPending}
+                    onCheckedChange={(v) => setFaceRecognition.mutate(v)}
+                  />
+                </div>
+              </div>
+
+              {setFaceRecognition.isPending && !faceStatus?.enabled ? (
+                <p className="mt-2 text-xs text-muted-foreground">{t("settings.ai.preparing")}</p>
+              ) : null}
+
+              {faceStatus?.enabled ? (
+                <div className="mt-3 space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <Stat label={t("settings.ai.people")} value={faceStatus.stats.people} />
+                    <Stat label={t("settings.ai.faces")} value={faceStatus.stats.faces} />
+                    <Stat label={t("settings.ai.pending")} value={faceStatus.stats.pendingPhotos} />
+                  </div>
+                  {faceRunning && faceProgress ? (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      {t("settings.ai.indexing", {
+                        processed: faceProgress.processed,
+                        total: faceProgress.total,
+                      })}
+                    </p>
+                  ) : null}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={faceRunning || faceStatus.stats.pendingPhotos === 0}
+                      onClick={() => indexFaces.mutate()}
+                    >
+                      <Users className="h-4 w-4" />
+                      {t("settings.ai.indexNow")}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        if (confirm(t("settings.ai.clearConfirm"))) clearFaces.mutate();
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {t("settings.ai.clearData")}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t("settings.ai.privacyNote")}</p>
+                </div>
               ) : null}
             </div>
-            <CardDescription>
-              {t("settings.ai.description")}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={aiDisabled ? "pointer-events-none space-y-3 opacity-60" : "space-y-3"}
-              aria-disabled={aiDisabled}
-            >
+
+            {/* Still upcoming */}
+            <div className="space-y-2 opacity-60">
               <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-sm font-medium text-foreground">{t("settings.ai.faceTitle")}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t("settings.ai.faceDescription")}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">{t("settings.ai.nlSearchTitle")}</p>
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    {t("settings.ai.comingSoon")}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">{t("settings.ai.nlSearchDescription")}</p>
               </div>
               <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-sm font-medium text-foreground">{t("settings.ai.nlSearchTitle")}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t("settings.ai.nlSearchDescription")}
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-sm font-medium text-foreground">{t("settings.ai.ocrTitle")}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t("settings.ai.ocrDescription")}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-foreground">{t("settings.ai.ocrTitle")}</p>
+                  <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                    {t("settings.ai.comingSoon")}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">{t("settings.ai.ocrDescription")}</p>
               </div>
             </div>
           </CardContent>

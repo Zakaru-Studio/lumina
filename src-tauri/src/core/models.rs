@@ -133,6 +133,31 @@ pub struct Tag {
     pub count: i64,
 }
 
+/// A reverse-geocoded place for a coordinate. Any field may be absent depending
+/// on the location (e.g. only a country far from any known city, or nothing at
+/// all over open sea). Persisted in the geocode cache so a point is looked up
+/// online at most once.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoPlace {
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub country: Option<String>,
+}
+
+/// A forward-geocoding hit: a typed place name resolved to a coordinate. Used by
+/// the location editor's "locate" action so entering a city/region/country can
+/// drop the map pin without hunting for it by hand.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoSearchResult {
+    pub lat: f64,
+    pub lon: f64,
+    pub place: GeoPlace,
+    /// The service's full human-readable label for the match.
+    pub display_name: String,
+}
+
 /// An album — either a manual collection or a smart, rule-driven view.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -156,6 +181,10 @@ pub struct Album {
     pub folder_path: Option<String>,
     #[serde(default)]
     pub count: i64,
+    /// Thumbnail path of the album's representative (newest) photo, for the
+    /// gallery cover. `None` when the album is empty or that photo has no thumb.
+    #[serde(default)]
+    pub cover_thumb_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

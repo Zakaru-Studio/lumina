@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::error::Result;
 
+pub mod face;
 pub mod store;
 
 /// The kind of artifact an AI provider produces.

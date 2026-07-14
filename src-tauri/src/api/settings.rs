@@ -50,13 +50,16 @@ pub struct AiStatus {
     pub detectors: usize,
 }
 
-/// Report AI availability so the UI can conditionally surface future features.
+/// Report AI availability so the UI can conditionally surface features. Now
+/// backed by the on-device face engine: "enabled" once the user has turned on
+/// face recognition and the models are installed locally.
 #[tauri::command]
-pub async fn ai_status(_state: State<'_, SharedState>) -> Result<AiStatus> {
-    // No providers are registered in the MVP; the registry is wired and ready.
+pub async fn ai_status(state: State<'_, SharedState>) -> Result<AiStatus> {
+    let enabled =
+        state.config_snapshot().face_recognition_enabled && state.faces.models_installed();
     Ok(AiStatus {
-        enabled: false,
+        enabled,
         embedders: 0,
-        detectors: 0,
+        detectors: if enabled { 1 } else { 0 },
     })
 }

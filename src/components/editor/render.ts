@@ -10,6 +10,8 @@
 import {
   applyClarity,
   applySharpen,
+  applyTint,
+  applyTones,
   applyVibrance,
   applyVignette,
   applyWarmth,
@@ -118,7 +120,12 @@ export function renderTo(
 
   // --- 3. Pixel passes -----------------------------------------------------
   const needsPixels =
+    adjust.highlights !== 0 ||
+    adjust.shadows !== 0 ||
+    adjust.whites !== 0 ||
+    adjust.blacks !== 0 ||
     adjust.warmth !== 0 ||
+    adjust.tint !== 0 ||
     adjust.vibrance !== 0 ||
     adjust.clarity !== 0 ||
     adjust.sharpness > 0 ||
@@ -134,7 +141,11 @@ export function renderTo(
     return;
   }
 
+  // Tone regions first (they behave like per-region exposure), then colour,
+  // then detail, with the vignette applied last over everything.
+  applyTones(img, adjust.highlights, adjust.shadows, adjust.whites, adjust.blacks);
   applyWarmth(img, adjust.warmth);
+  applyTint(img, adjust.tint);
   applyVibrance(img, adjust.vibrance);
   applyClarity(img, adjust.clarity, outW, outH);
   applySharpen(img, adjust.sharpness, outW, outH);

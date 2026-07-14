@@ -3,7 +3,7 @@
 //! mutations (rating, color, favorite, soft delete, thumbnail status).
 
 use rusqlite::types::Value;
-use rusqlite::{params, params_from_iter, Connection, Row};
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 
 use crate::core::error::{Error, Result};
 use crate::core::models::{
@@ -246,6 +246,29 @@ fn build_where(filter: &PhotoFilter) -> (String, Vec<Value>) {
         clauses.push("photos.folder LIKE ?".to_string());
         params.push(Value::Text(format!("{folder}%")));
     }
+    // Place: match the photo's coordinate against any cached reverse-geocoded
+    // name. `geocache` is keyed by the same ~110 m grid the map uses (lat/lon ×
+    // 1000, rounded), so we round the photo's own coordinate the same way and
+    // look for a row whose city/region/country contains the query (any language).
+    if let Some(place) = filter
+        .place
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        clauses.push(
+            "photos.gps_lat IS NOT NULL AND photos.gps_lon IS NOT NULL AND EXISTS (\
+                 SELECT 1 FROM geocache g \
+                 WHERE g.lat_e3 = CAST(ROUND(photos.gps_lat * 1000) AS INTEGER) \
+                   AND g.lon_e3 = CAST(ROUND(photos.gps_lon * 1000) AS INTEGER) \
+                   AND (g.city LIKE ? OR g.region LIKE ? OR g.country LIKE ?))"
+                .to_string(),
+        );
+        let like = format!("%{place}%");
+        params.push(Value::Text(like.clone()));
+        params.push(Value::Text(like.clone()));
+        params.push(Value::Text(like));
+    }
     if let Some(from) = filter.date_from {
         clauses.push("photos.taken_at >= ?".to_string());
         params.push(Value::Integer(from));
@@ -259,6 +282,12 @@ fn build_where(filter: &PhotoFilter) -> (String, Vec<Value>) {
             "photos.id IN (SELECT photo_id FROM album_photos WHERE album_id = ?)".to_string(),
         );
         params.push(Value::Text(album.clone()));
+    }
+    if let Some(person) = &filter.person_id {
+        clauses.push(
+            "photos.id IN (SELECT photo_id FROM faces WHERE person_id = ?)".to_string(),
+        );
+        params.push(Value::Text(person.clone()));
     }
     // Require ALL requested tags via a grouped count.
     for tag in &filter.tags {
@@ -436,6 +465,25 @@ pub fn set_rating(conn: &Connection, ids: &[String], rating: u8) -> Result<()> {
     Ok(())
 }
 
+/// Set (or clear, when both are `None`) the GPS coordinates of a set of photos.
+/// Catalog-only — the original files are not modified.
+pub fn set_location(
+    conn: &Connection,
+    ids: &[String],
+    lat: Option<f64>,
+    lon: Option<f64>,
+) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
+    for id in ids {
+        tx.execute(
+            "UPDATE photos SET gps_lat = ?2, gps_lon = ?3 WHERE id = ?1 AND deleted_at IS NULL",
+            params![id, lat, lon],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 /// Toggle/set the favorite flag for a set of photos.
 pub fn set_favorite(conn: &Connection, ids: &[String], favorite: bool) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
@@ -592,6 +640,34 @@ const DUP_PREDICATE: &str = "deleted_at IS NULL AND hash IS NOT NULL AND hash IN
 pub fn duplicates_total(conn: &Connection) -> Result<i64> {
     let sql = format!("SELECT COUNT(*) FROM photos WHERE {DUP_PREDICATE}");
     Ok(conn.query_row(&sql, [], |r| r.get(0))?)
+}
+
+/// The `thumb_path` of the newest live photo matching a filter that actually has
+/// a thumbnail — the album's representative gallery cover. `Ok(None)` when the
+/// filter matches nothing (or nothing thumbnailed yet). Works for manual albums
+/// too (via `filter.album_id`).
+pub fn cover_thumb(conn: &Connection, filter: &PhotoFilter) -> Result<Option<String>> {
+    let (where_sql, params) = build_where(filter);
+    let sql = format!(
+        "SELECT thumb_path FROM photos {where_sql} AND thumb_path IS NOT NULL \
+         ORDER BY COALESCE(taken_at, imported_at) DESC LIMIT 1"
+    );
+    let thumb = conn
+        .query_row(&sql, params_from_iter(params.iter()), |r| r.get(0))
+        .optional()?;
+    Ok(thumb)
+}
+
+/// Cover thumbnail for the Duplicates smart album: the newest duplicate live
+/// photo that has a thumbnail. `Ok(None)` when there are no thumbnailed
+/// duplicates.
+pub fn duplicates_cover_thumb(conn: &Connection) -> Result<Option<String>> {
+    let sql = format!(
+        "SELECT thumb_path FROM photos WHERE {DUP_PREDICATE} AND thumb_path IS NOT NULL \
+         ORDER BY COALESCE(taken_at, imported_at) DESC LIMIT 1"
+    );
+    let thumb = conn.query_row(&sql, [], |r| r.get(0)).optional()?;
+    Ok(thumb)
 }
 
 /// List a page of duplicate photos honoring the query's sort. A secondary

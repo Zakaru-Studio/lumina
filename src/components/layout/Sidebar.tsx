@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { NavLink, useNavigate } from "react-router-dom";
-import { getVersion } from "@tauri-apps/api/app";
 import {
   Aperture,
   Calendar,
@@ -13,10 +12,10 @@ import {
   Images,
   Map as MapIcon,
   Plus,
-  Search,
   Settings,
   Sun,
   Tag as TagIcon,
+  Users,
   Video,
   type LucideIcon,
 } from "lucide-react";
@@ -74,8 +73,11 @@ function albumIcon(name: string | null): LucideIcon {
   }
 }
 
-/** Date-relative smart albums are hidden while they contain no media. */
-const HIDE_WHEN_EMPTY = new Set(["today", "week", "month"]);
+/**
+ * Smart albums that are just noise when empty — the date-relative ones plus
+ * Favorites — are hidden from the sidebar while they contain no media.
+ */
+const HIDE_WHEN_EMPTY = new Set(["today", "week", "month", "favorites"]);
 function hideEmptySmart(album: Album): boolean {
   const preset = (album.rule?.preset as string | undefined) ?? "";
   return HIDE_WHEN_EMPTY.has(preset) && album.count === 0;
@@ -92,8 +94,9 @@ const NAV: NavItem[] = [
   { to: "/", labelKey: "nav.library", icon: Images, end: true },
   { to: "/timeline", labelKey: "nav.timeline", icon: CalendarDays },
   { to: "/map", labelKey: "nav.map", icon: MapIcon },
-  { to: "/search", labelKey: "nav.search", icon: Search },
+  { to: "/people", labelKey: "nav.people", icon: Users },
   { to: "/albums", labelKey: "nav.albums", icon: FolderHeart, end: true },
+  { to: "/settings", labelKey: "nav.settings", icon: Settings, end: true },
 ];
 
 /**
@@ -114,12 +117,6 @@ export function Sidebar() {
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newParent, setNewParent] = useState<string>(ROOT_VALUE);
-  const [appVersion, setAppVersion] = useState<string | null>(null);
-
-  // Resolve the running app version (from tauri.conf.json) once.
-  useEffect(() => {
-    void getVersion().then(setAppVersion).catch(() => setAppVersion(null));
-  }, []);
 
   const submitCreate = () => {
     const name = newName.trim();
@@ -169,22 +166,15 @@ export function Sidebar() {
       {/* Brand */}
       <div
         className={cn(
-          "drag-region flex items-center gap-2 px-2 py-3",
+          "drag-region flex items-center gap-2 px-2 pb-3",
           collapsed && "justify-center px-0",
         )}
       >
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+        <div className="flex h-7 w-7 items-center justify-center rounded-sm bg-primary text-primary-foreground">
           <Aperture className="h-4 w-4" />
         </div>
         {!collapsed ? (
-          <span className="flex items-baseline gap-1.5">
-            <span className="text-base font-semibold tracking-tight text-foreground">Lumina</span>
-            {appVersion ? (
-              <span className="text-[11px] font-normal tabular-nums text-muted-foreground">
-                v{appVersion}
-              </span>
-            ) : null}
-          </span>
+          <span className="text-base font-semibold tracking-tight text-foreground">Lumina</span>
         ) : null}
       </div>
 
@@ -278,7 +268,7 @@ export function Sidebar() {
               <button
                 key={tag.id}
                 type="button"
-                onClick={() => navigate("/search")}
+                onClick={() => navigate(`/?q=${encodeURIComponent(tag.name)}`)}
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
               >
                 <TagIcon className="h-[18px] w-[18px] shrink-0" />
@@ -288,25 +278,6 @@ export function Sidebar() {
             ))}
           </SidebarGroup>
         ) : null}
-      </div>
-
-      {/* Settings (bottom) */}
-      <div className="pt-1">
-        {collapsed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <NavLink to="/settings" className={linkClass} aria-label={t("nav.settings")}>
-                <Settings className="h-[18px] w-[18px] shrink-0" />
-              </NavLink>
-            </TooltipTrigger>
-            <TooltipContent side="right">{t("nav.settings")}</TooltipContent>
-          </Tooltip>
-        ) : (
-          <NavLink to="/settings" className={linkClass}>
-            <Settings className="h-[18px] w-[18px] shrink-0" />
-            <span className="truncate">{t("nav.settings")}</span>
-          </NavLink>
-        )}
       </div>
 
       {/* Quick album creation */}

@@ -55,6 +55,11 @@ pub struct AppConfig {
     /// what triggers the first-import choice modal.
     #[serde(default)]
     pub folder_sync_mode: Option<String>,
+    /// Whether on-device face recognition ("People") is enabled. When `true`
+    /// and the models are installed, the background indexer runs and clusters
+    /// faces locally. Everything stays on the machine; nothing is uploaded.
+    #[serde(default)]
+    pub face_recognition_enabled: bool,
 }
 
 /// Serde default for boolean fields that should default to `true` when absent
@@ -75,6 +80,7 @@ impl Default for AppConfig {
             backup_destination: None,
             auto_backup_prompt: true,
             folder_sync_mode: None,
+            face_recognition_enabled: false,
         }
     }
 }
@@ -99,6 +105,8 @@ pub struct Paths {
     pub database: PathBuf,
     /// Root directory for the WebP thumbnail cache.
     pub thumbnails: PathBuf,
+    /// Directory holding downloaded on-device AI models (face detector/embedder).
+    pub models: PathBuf,
 }
 
 impl Paths {
@@ -111,6 +119,7 @@ impl Paths {
         Self {
             database: data_dir.join("lumina.db"),
             thumbnails,
+            models: data_dir.join("models"),
             data_dir,
         }
     }

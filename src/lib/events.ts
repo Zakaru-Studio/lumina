@@ -7,6 +7,8 @@ import type {
   BackupProgress,
   BackupSummary,
   DeviceInfo,
+  FaceProgress,
+  FaceSummary,
   ScanProgress,
   ScanSummary,
 } from "@/types";
@@ -20,6 +22,9 @@ export const EVENTS = {
   deviceConnected: "device://connected",
   backupProgress: "backup://progress",
   backupDone: "backup://done",
+  faceProgress: "face://progress",
+  faceDone: "face://done",
+  peopleChanged: "people://changed",
 } as const;
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {
@@ -48,4 +53,16 @@ export function onBackupProgress(cb: (p: BackupProgress) => void): Promise<Unlis
 
 export function onBackupDone(cb: (s: BackupSummary) => void): Promise<UnlistenFn> {
   return listen<BackupSummary>(EVENTS.backupDone, (e) => cb(e.payload));
+}
+
+export function onFaceProgress(cb: (p: FaceProgress) => void): Promise<UnlistenFn> {
+  return listen<FaceProgress>(EVENTS.faceProgress, (e) => cb(e.payload));
+}
+
+export function onFaceDone(cb: (s: FaceSummary) => void): Promise<UnlistenFn> {
+  return listen<FaceSummary>(EVENTS.faceDone, (e) => cb(e.payload));
+}
+
+export function onPeopleChanged(cb: () => void): Promise<UnlistenFn> {
+  return listen(EVENTS.peopleChanged, () => cb());
 }

@@ -17,6 +17,8 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (3, include_str!("../../migrations/0003_album_hierarchy.sql")),
     (4, include_str!("../../migrations/0004_date_override.sql")),
     (5, include_str!("../../migrations/0005_folder_mirror.sql")),
+    (6, include_str!("../../migrations/0006_faces.sql")),
+    (7, include_str!("../../migrations/0007_geocache.sql")),
 ];
 
 /// Apply all pending migrations to `conn`.

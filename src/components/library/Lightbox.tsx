@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router-dom";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { DateTimeEditor } from "@/components/common/DateTimeEditor";
+import { FaceCrop } from "@/components/people/FaceCrop";
 import { StarRating } from "@/components/common/StarRating";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,15 +31,25 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { usePhoto } from "@/hooks/usePhotos";
+import { usePlace } from "@/hooks/useMapPhotos";
+import { useFacesInPhoto } from "@/hooks/useFaces";
 import { useAttachTag, useCreateTag, useDetachTag, useTags } from "@/hooks/useTags";
 import {
   useSetCaptureDate,
   useSetFavorite,
+  useSetLocation,
   useSetRating,
 } from "@/hooks/usePhotoMutations";
 import { useEditorStore } from "@/stores/editorStore";
 import { useRenamePhoto } from "@/stores/renamePhotoStore";
-import type { Photo } from "@/types";
+import type { FaceThumb, Photo } from "@/types";
+
+// The location editor pulls in the bundled world map (~110 kB) + d3-geo. Load it
+// lazily, only when the user actually edits a location, so it never weighs down
+// the always-mounted Lightbox / initial app start.
+const LocationEditor = lazy(() =>
+  import("@/components/library/LocationEditor").then((m) => ({ default: m.LocationEditor })),
+);
 
 /** Props for {@link Lightbox}. */
 export interface LightboxProps {
@@ -123,6 +135,7 @@ function MetaRow({
  */
 export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: LightboxProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const open = index !== null && index >= 0 && index < ids.length;
   const currentId = open ? ids[index] ?? null : null;
 
@@ -131,6 +144,19 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
   const detail = usePhoto(currentId);
   const photo: Photo | undefined =
     detail.data ?? (open && index !== null ? getPhoto?.(index) : undefined);
+
+  // Faces detected in the current photo (only fetched when the feature is on).
+  // One avatar per distinct person, ordered by detection confidence.
+  const { data: faces = [] } = useFacesInPhoto(photo?.id);
+  const peopleInPhoto = useMemo(() => {
+    const seen = new Set<string>();
+    return faces.filter((f) => {
+      if (!f.personId) return true; // keep every un-clustered face
+      if (seen.has(f.personId)) return false;
+      seen.add(f.personId);
+      return true;
+    });
+  }, [faces]);
 
   /** Videos render in a <video> player instead of the zoomable <img>. */
   const isVideo = photo?.mediaType === "video";
@@ -149,6 +175,10 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
   const [imgLoaded, setImgLoaded] = useState(false);
   const [tagInput, setTagInput] = useState("");
   const [dateEditorOpen, setDateEditorOpen] = useState(false);
+  const [locationEditorOpen, setLocationEditorOpen] = useState(false);
+  // Latches true on first open so the lazy editor mounts on demand yet stays
+  // mounted afterwards (keeping its close animation and instant re-opens).
+  const [locationEditorMounted, setLocationEditorMounted] = useState(false);
 
   // --- Zoom & pan state ---
   const [scale, setScale] = useState(1);
@@ -172,9 +202,22 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
   const setRating = useSetRating();
   const setFavorite = useSetFavorite();
   const setCaptureDate = useSetCaptureDate();
+  const setLocation = useSetLocation();
   const createTag = useCreateTag();
   const attachTag = useAttachTag();
   const detachTag = useDetachTag();
+
+  // Location row label: the saved/cached place name for the coordinate (a cheap
+  // cache-only lookup, no online call), falling back to the raw coordinates.
+  const storedPlace = usePlace(photo?.gpsLat ?? null, photo?.gpsLon ?? null);
+  const locationLabel = useMemo(() => {
+    const la = photo?.gpsLat;
+    const lo = photo?.gpsLon;
+    if (la == null || lo == null) return null;
+    const p = storedPlace.data;
+    const parts = p ? [p.city, p.country].filter(Boolean) : [];
+    return parts.length ? parts.join(", ") : `${la.toFixed(4)}°, ${lo.toFixed(4)}°`;
+  }, [photo?.gpsLat, photo?.gpsLon, storedPlace.data]);
 
   /** Commit a new transform to both refs (for handlers) and state (for render). */
   const applyView = useCallback((nextScale: number, nextOffset: Point, animate: boolean) => {
@@ -452,11 +495,12 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
           <ChevronRight className="h-6 w-6" />
         </Button>
 
-        {/* Zoom controls (bottom-left). Marked so they never trigger image pan.
-            Hidden for videos, which use their own native player controls. */}
+        {/* Zoom controls: centered above the image within the preview area.
+            Marked so they never trigger image pan. Hidden for videos, which use
+            their own native player controls. */}
         <div
           className={cn(
-            "absolute bottom-4 left-4 z-10 flex items-center gap-1 rounded-xl bg-background/60 px-1 py-1 backdrop-blur",
+            "absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-1 rounded-xl bg-background/60 px-1 py-1 backdrop-blur",
             isVideo && "hidden",
           )}
           onPointerDown={(e) => e.stopPropagation()}
@@ -544,8 +588,9 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
         ) : null}
       </div>
 
-      {/* Metadata panel */}
-      <aside className="flex w-80 shrink-0 flex-col gap-5 overflow-y-auto bg-card/60 p-6">
+      {/* Metadata panel. Extra top padding drops the title row below the
+          floating close button so its rename pencil never sits under the X. */}
+      <aside className="flex w-80 shrink-0 flex-col gap-5 overflow-y-auto bg-card/60 p-6 pt-16">
         {!photo ? (
           <div className="flex flex-col gap-3">
             <Skeleton className="h-5 w-2/3" />
@@ -653,6 +698,67 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
           </datalist>
         </div>
 
+        {/* People detected in this photo. Each avatar is the face cropped from
+            the photo's thumbnail (no separate crop files). Clicking a known
+            person jumps to their page. */}
+        {peopleInPhoto.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t("lightbox.people")}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              {peopleInPhoto.map((f) => {
+                const rotated = photo.orientation >= 5 && photo.orientation <= 8;
+                const faceThumb: FaceThumb = {
+                  faceId: f.id,
+                  photoId: photo.id,
+                  thumbPath: photo.thumbPath,
+                  x: f.x,
+                  y: f.y,
+                  w: f.w,
+                  h: f.h,
+                  photoW: rotated ? photo.height : photo.width,
+                  photoH: rotated ? photo.width : photo.height,
+                };
+                const label = f.personName ?? t("people.unnamed");
+                const linked = !!f.personId;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    disabled={!linked}
+                    title={label}
+                    aria-label={label}
+                    onClick={() => {
+                      if (!f.personId) return;
+                      onClose();
+                      navigate(`/people/${f.personId}`);
+                    }}
+                    className={cn(
+                      "group flex w-14 flex-col items-center gap-1",
+                      linked ? "cursor-pointer" : "cursor-default",
+                    )}
+                  >
+                    <FaceCrop
+                      face={faceThumb}
+                      alt={label}
+                      className={cn(
+                        "h-12 w-12 rounded-full ring-1 ring-border transition-all",
+                        linked && "group-hover:ring-2 group-hover:ring-primary",
+                      )}
+                    />
+                    {f.personName ? (
+                      <span className="w-full truncate text-center text-[11px] text-muted-foreground group-hover:text-foreground">
+                        {f.personName}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+
         {/* Read-only metadata */}
         <div className="flex flex-col gap-3">
           {formatExposure(photo) ? <MetaRow label={t("lightbox.exposure")} value={formatExposure(photo)} /> : null}
@@ -664,6 +770,15 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
           />
           <MetaRow label={t("lightbox.dimensions")} value={`${photo.width} × ${photo.height}`} />
           <MetaRow label={t("lightbox.size")} value={formatBytes(photo.fileSize)} />
+          <MetaRow
+            label={t("lightbox.location")}
+            value={locationLabel ?? t("lightbox.addLocation")}
+            onClick={() => {
+              setLocationEditorMounted(true);
+              setLocationEditorOpen(true);
+            }}
+            title={t("lightbox.editLocation")}
+          />
           <MetaRow
             label={t("lightbox.folder")}
             value={photo.folder}
@@ -682,6 +797,24 @@ export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: Light
           }}
           pending={setCaptureDate.isPending}
         />
+
+        {locationEditorMounted ? (
+          <Suspense fallback={null}>
+            <LocationEditor
+              open={locationEditorOpen}
+              onOpenChange={setLocationEditorOpen}
+              lat={photo.gpsLat}
+              lon={photo.gpsLon}
+              pending={setLocation.isPending}
+              onSubmit={(lat, lon) =>
+                setLocation.mutate(
+                  { ids: [photo.id], lat, lon },
+                  { onSuccess: () => setLocationEditorOpen(false) },
+                )
+              }
+            />
+          </Suspense>
+        ) : null}
           </>
         )}
       </aside>

@@ -110,6 +110,24 @@ pub async fn set_favorite(
     .await
 }
 
+/// Set (or clear, when `lat`/`lon` are `null`) the GPS coordinates of one or more
+/// photos. Catalog-only: drives the map and the metadata panel; the original
+/// files are left untouched.
+#[tauri::command]
+pub async fn set_location(
+    state: State<'_, SharedState>,
+    ids: Vec<String>,
+    lat: Option<f64>,
+    lon: Option<f64>,
+) -> Result<()> {
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        photos::set_location(&conn, &ids, lat, lon)
+    })
+    .await
+}
+
 /// Remove photos from the catalog only (never deletes files on disk).
 #[tauri::command]
 pub async fn remove_photos(state: State<'_, SharedState>, ids: Vec<String>) -> Result<u64> {
@@ -399,6 +417,37 @@ pub async fn save_edited_image(dest_path: String, data_base64: String) -> Result
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, &bytes)?;
+        Ok(dest_path)
+    })
+    .await
+}
+
+/// Encode edited image bytes (a base64 PNG produced by the editor) to AVIF at the
+/// given `quality` (1..=100) and write a NEW file at `dest_path`. Browsers can't
+/// encode AVIF from a canvas, so the editor hands us a lossless PNG to re-encode.
+#[tauri::command]
+pub async fn save_avif(dest_path: String, data_base64: String, quality: u8) -> Result<String> {
+    use base64::Engine;
+    blocking(move || {
+        let payload = data_base64
+            .split_once(',')
+            .map(|(_, b)| b)
+            .unwrap_or(&data_base64);
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(payload.trim())
+            .map_err(|e| crate::core::error::Error::Invalid(format!("invalid image data: {e}")))?;
+        let img = image::load_from_memory(&bytes)
+            .map_err(|e| crate::core::error::Error::Invalid(format!("cannot decode image: {e}")))?;
+        let path = std::path::Path::new(&dest_path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let mut out = std::io::BufWriter::new(std::fs::File::create(path)?);
+        // Speed 6 balances encode latency against size for an interactive export.
+        let encoder =
+            image::codecs::avif::AvifEncoder::new_with_speed_quality(&mut out, 6, quality.clamp(1, 100));
+        img.write_with_encoder(encoder)
+            .map_err(|e| crate::core::error::Error::Other(format!("avif encode failed: {e}")))?;
         Ok(dest_path)
     })
     .await

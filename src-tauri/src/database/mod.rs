@@ -7,6 +7,7 @@
 
 pub mod albums;
 pub mod folders;
+pub mod geocache;
 pub mod migrations;
 pub mod photos;
 pub mod pool;

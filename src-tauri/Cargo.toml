@@ -44,7 +44,7 @@ r2d2 = "0.8"
 r2d2_sqlite = "0.25"
 
 # --- Images & metadata ---
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp", "tiff"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp", "tiff", "avif"] }
 fast_image_resize = { version = "5", features = ["image"] }
 kamadak-exif = "0.5"
 # Pure-Rust EXIF *writing* (kamadak-exif is read-only). Used to bake a corrected
@@ -61,6 +61,16 @@ notify-debouncer-full = "0.3"
 # Send deleted originals to the OS trash / Recycle Bin instead of unlinking them
 # outright, so a "delete from disk" stays recoverable from the system trash.
 trash = "5"
+
+# --- On-device AI (face recognition) ---
+# Pure-Rust ONNX inference engine (no C++/ONNXRuntime native lib to ship, in the
+# same spirit as `rawler`). Runs the YuNet (MIT) face detector and SFace
+# (Apache-2.0) face embedder fully offline on the CPU. Both model licenses are
+# commercial-use-friendly; see `ai::face::models`.
+tract-onnx = "0.21"
+# Small blocking HTTP client (rustls) used *only* to fetch the two model files
+# on first enable from a configurable host. No user data is ever uploaded.
+ureq = { version = "2", default-features = false, features = ["tls"] }
 
 # --- Serialization & misc ---
 serde = { version = "1", features = ["derive"] }

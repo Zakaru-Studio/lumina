@@ -7,6 +7,8 @@
 
 pub mod albums;
 pub mod backup;
+pub mod faces;
+pub mod geocode;
 pub mod import;
 pub mod photos;
 pub mod scan;

@@ -7,6 +7,7 @@ import { DeletePhotosDialog } from "@/components/library/DeletePhotosDialog";
 import { FolderSyncModePrompt } from "@/components/library/FolderSyncModePrompt";
 import { ImportAlbumsDialog } from "@/components/library/ImportAlbumsDialog";
 import { RenamePhotoDialog } from "@/components/library/RenamePhotoDialog";
+import { FaceProgressBar } from "@/components/layout/FaceProgressBar";
 import { ScanProgressBar } from "@/components/layout/ScanProgressBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -14,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useBackupEvents } from "@/hooks/useBackup";
+import { useFaceEvents } from "@/hooks/useFaces";
 import { useScanEvents } from "@/hooks/useScan";
 import { useThemeSync } from "@/hooks/useSettings";
 import { useAppShortcuts } from "@/hooks/useKeyboard";
@@ -37,6 +39,7 @@ const ImageEditor = lazy(() =>
 export function AppShell() {
   useScanEvents();
   useBackupEvents();
+  useFaceEvents();
   useThemeSync();
   useAppShortcuts();
 
@@ -57,6 +60,7 @@ export function AppShell() {
               <Outlet />
             </Suspense>
             <ScanProgressBar />
+            <FaceProgressBar />
           </main>
         </div>
         <Suspense fallback={null}>

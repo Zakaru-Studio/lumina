@@ -81,6 +81,21 @@ export interface Tag {
   count: number;
 }
 
+/** A reverse-geocoded place (online fallback for the map). Any field may be null. */
+export interface GeoPlace {
+  city: string | null;
+  region: string | null;
+  country: string | null;
+}
+
+/** A forward-geocoding hit: a typed place resolved to a coordinate. */
+export interface GeoSearchResult {
+  lat: number;
+  lon: number;
+  place: GeoPlace;
+  displayName: string;
+}
+
 export interface Album {
   id: string;
   name: string;
@@ -94,6 +109,8 @@ export interface Album {
   /** On-disk folder this album mirrors; `null` for virtual/smart albums. */
   folderPath: string | null;
   count: number;
+  /** Thumbnail path of the album's representative photo (gallery cover); null when empty. */
+  coverThumbPath: string | null;
 }
 
 export interface WatchedFolder {
@@ -149,12 +166,86 @@ export interface AppConfig {
   /** Default folder-management mode chosen at first import: `"mirror"` |
    * `"virtual"`, or `null` until the user picks (triggers the choice modal). */
   folderSyncMode: string | null;
+  /** On-device face recognition ("People") turned on. */
+  faceRecognitionEnabled: boolean;
 }
 
 export interface AiStatus {
   enabled: boolean;
   embedders: number;
   detectors: number;
+}
+
+// --- Faces / People (on-device face recognition) ---
+
+/** A face crop reference: a photo thumbnail + the face's normalized bbox. The
+ * UI crops the thumbnail to the box via CSS (no separate crop files). */
+export interface FaceThumb {
+  faceId: string;
+  photoId: string;
+  thumbPath: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Photo's display-oriented pixel dimensions, for an undistorted square crop. */
+  photoW: number;
+  photoH: number;
+}
+
+/** A person = a cluster of faces, optionally named by the user. */
+export interface PersonSummary {
+  id: string;
+  name: string | null;
+  faceCount: number;
+  isHidden: boolean;
+  cover: FaceThumb | null;
+}
+
+/** One detected face within a photo (overlays / corrections). */
+export interface FaceBox {
+  id: string;
+  personId: string | null;
+  personName: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  score: number | null;
+}
+
+export interface FaceStats {
+  people: number;
+  namedPeople: number;
+  faces: number;
+  indexedPhotos: number;
+  pendingPhotos: number;
+}
+
+/** Full face-feature status for gating + the settings panel. */
+export interface FaceStatus {
+  enabled: boolean;
+  modelsInstalled: boolean;
+  running: boolean;
+  stats: FaceStats;
+}
+
+/** Live face-indexing progress (event payload). */
+export interface FaceProgress {
+  processed: number;
+  total: number;
+  faces: number;
+  people: number;
+  current: string | null;
+}
+
+/** Emitted when a face-indexing pass finishes. */
+export interface FaceSummary {
+  photosProcessed: number;
+  facesDetected: number;
+  people: number;
+  failed: number;
+  durationMs: number;
 }
 
 // --- Query contract ---
@@ -171,10 +262,13 @@ export interface PhotoFilter {
   cameraModel?: string | null;
   lens?: string | null;
   folder?: string | null;
+  /** Match photos whose reverse-geocoded place (city/region/country) contains this text. */
+  place?: string | null;
   dateFrom?: number | null;
   dateTo?: number | null;
   tags?: string[];
   albumId?: string | null;
+  personId?: string | null;
 }
 
 export interface PhotoQuery {

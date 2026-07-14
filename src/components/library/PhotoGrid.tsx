@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent, MouseEvent, WheelEvent } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 
@@ -8,7 +8,7 @@ import { useSelectionStore } from "@/stores/selectionStore";
 import { useUiStore } from "@/stores/uiStore";
 import type { Photo } from "@/types";
 
-const GAP = 10;
+const GAP = 13;
 
 /** Props for {@link PhotoGrid}. */
 export interface PhotoGridProps {
@@ -79,6 +79,17 @@ export function PhotoGrid({ ids, getPhoto, onOpen, onVisibleRangeChange }: Photo
     estimateSize: () => rowSize,
     overscan: 6,
   });
+
+  // The virtualizer estimates every row at `rowSize`, but it memoizes row
+  // offsets on the row COUNT — not on the estimate. A window resize that changes
+  // the cell size *without* crossing a column-count boundary therefore leaves
+  // the cached offsets stale: rows keep their old `translateY` while rendering
+  // at the new height, so they overlap. Re-measuring on `rowSize` change bumps
+  // the measurement cache so offsets + total size recompute from the current
+  // estimate; a layout effect runs it before paint, avoiding a flashed overlap.
+  useLayoutEffect(() => {
+    rowVirtualizer.measure();
+  }, [rowSize, rowVirtualizer]);
 
   const virtualRows = rowVirtualizer.getVirtualItems();
 

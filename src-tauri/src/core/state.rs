@@ -10,6 +10,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tauri::AppHandle;
 
+use crate::ai::face::FaceManager;
 use crate::backup::BackupManager;
 use crate::core::config::{AppConfig, Paths};
 use crate::database::Database;
@@ -32,6 +33,8 @@ pub struct AppState {
     pub thumbnails: Arc<ThumbnailService>,
     /// Background device-backup manager.
     pub backup: Arc<BackupManager>,
+    /// On-device face recognition ("People") manager.
+    pub faces: Arc<FaceManager>,
 }
 
 impl AppState {
@@ -43,6 +46,7 @@ impl AppState {
         scanner: Arc<ScanManager>,
         thumbnails: Arc<ThumbnailService>,
         backup: Arc<BackupManager>,
+        faces: Arc<FaceManager>,
     ) -> Self {
         Self {
             app,
@@ -52,6 +56,7 @@ impl AppState {
             scanner,
             thumbnails,
             backup,
+            faces,
         }
     }
 

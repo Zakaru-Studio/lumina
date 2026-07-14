@@ -8,7 +8,6 @@ import {
   FolderInput,
   Images,
   Map as MapIcon,
-  Search,
   Settings,
 } from "lucide-react";
 
@@ -88,9 +87,6 @@ export function CommandPalette() {
           <CommandItem onSelect={() => go("/map")}>
             <MapIcon className="mr-2 h-4 w-4" /> {t("nav.map")}
           </CommandItem>
-          <CommandItem onSelect={() => go("/search")}>
-            <Search className="mr-2 h-4 w-4" /> {t("nav.search")}
-          </CommandItem>
           <CommandItem onSelect={() => go("/albums")}>
             <FolderHeart className="mr-2 h-4 w-4" /> {t("nav.albums")}
           </CommandItem>
@@ -115,7 +111,7 @@ export function CommandPalette() {
                 <CommandItem
                   key={photo.id}
                   value={`${photo.id}-${photo.filename}`}
-                  onSelect={() => go(`/search?q=${encodeURIComponent(debounced)}`)}
+                  onSelect={() => go(`/?q=${encodeURIComponent(debounced)}`)}
                 >
                   <div className="mr-2 h-8 w-8 shrink-0 overflow-hidden rounded">
                     <Thumbnail photo={photo} />

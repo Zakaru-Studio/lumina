@@ -47,6 +47,7 @@ import {
   useDeleteAlbum,
   useRenameAlbum,
 } from "@/hooks/useAlbums";
+import { assetSrc } from "@/lib/api";
 import { albumLabel } from "@/lib/albumLabel";
 import { albumOptions } from "@/lib/albumTree";
 import { useAlbumDelete } from "@/stores/albumDeleteStore";
@@ -168,19 +169,30 @@ export function AlbumsPage() {
                     <Card
                       key={album.id}
                       onClick={() => navigate(`/albums/${album.id}`)}
-                      className="group relative cursor-pointer border-0 bg-card transition-colors hover:bg-accent"
+                      className="group relative cursor-pointer overflow-hidden border-0 bg-card transition-colors hover:bg-accent"
                     >
-                      <CardContent className="flex flex-col gap-3 p-5">
-                        <div className="flex items-center justify-between">
-                          <Icon className="h-6 w-6 text-primary" />
-                          <Badge variant="secondary" className="text-xs">
-                            {t("albumsPage.smartBadge")}
-                          </Badge>
-                        </div>
-                        <div>
-                          <p className="truncate font-medium text-foreground">{albumLabel(album, t)}</p>
-                          <p className="text-xs text-muted-foreground">{t("albumsPage.photoCount", { count: album.count })}</p>
-                        </div>
+                      <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+                        {album.coverThumbPath ? (
+                          <img
+                            src={assetSrc(album.coverThumbPath)}
+                            alt={album.name}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                            decoding="async"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center">
+                            <Icon className="h-8 w-8 text-primary" />
+                          </div>
+                        )}
+                        <Badge variant="secondary" className="absolute right-2 top-2 text-xs">
+                          {t("albumsPage.smartBadge")}
+                        </Badge>
+                      </div>
+                      <CardContent className="p-4">
+                        <p className="truncate font-medium text-foreground">{albumLabel(album, t)}</p>
+                        <p className="text-xs text-muted-foreground">{t("albumsPage.photoCount", { count: album.count })}</p>
                       </CardContent>
                     </Card>
                   );
@@ -215,59 +227,70 @@ export function AlbumsPage() {
                       if (photoIds.length)
                         addToAlbum.mutate({ albumId: album.id, photoIds });
                     }}
-                    className={`group relative cursor-pointer border-0 bg-card transition-colors hover:bg-accent ${
+                    className={`group relative cursor-pointer overflow-hidden border-0 bg-card transition-colors hover:bg-accent ${
                       dropTarget === album.id ? "ring-2 ring-primary" : ""
                     }`}
                   >
-                    <CardContent className="flex flex-col gap-3 p-5">
-                      <div className="flex items-center justify-between">
-                        <Icon className="h-6 w-6 text-primary" />
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label={t("albumsPage.albumActions")}
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenuItem
-                              onSelect={() => {
-                                setRenaming(album);
-                                setRenameName(album.name);
-                              }}
-                            >
-                              {t("common.rename")}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              className="text-destructive"
-                              onSelect={() => {
-                                // Mirror albums trash their real folder — route
-                                // through the strong confirmation dialog.
-                                if (album.folderPath != null) {
-                                  useAlbumDelete
-                                    .getState()
-                                    .open({ id: album.id, name: album.name });
-                                } else if (
-                                  confirm(t("albumsPage.deleteConfirm", { name: album.name }))
-                                ) {
-                                  deleteAlbum.mutate(album.id);
-                                }
-                              }}
-                            >
-                              {t("common.delete")}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                      <div>
-                        <p className="truncate font-medium text-foreground">{album.name}</p>
-                        <p className="text-xs text-muted-foreground">{t("albumsPage.photoCount", { count: album.count })}</p>
-                      </div>
+                    <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+                      {album.coverThumbPath ? (
+                        <img
+                          src={assetSrc(album.coverThumbPath)}
+                          alt={album.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                          decoding="async"
+                          draggable={false}
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Icon className="h-8 w-8 text-primary" />
+                        </div>
+                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-2 top-2 h-7 w-7 bg-background/70 opacity-0 backdrop-blur-sm transition-opacity hover:bg-background/90 group-hover:opacity-100"
+                            onClick={(e) => e.stopPropagation()}
+                            aria-label={t("albumsPage.albumActions")}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setRenaming(album);
+                              setRenameName(album.name);
+                            }}
+                          >
+                            {t("common.rename")}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onSelect={() => {
+                              // Mirror albums trash their real folder — route
+                              // through the strong confirmation dialog.
+                              if (album.folderPath != null) {
+                                useAlbumDelete
+                                  .getState()
+                                  .open({ id: album.id, name: album.name });
+                              } else if (
+                                confirm(t("albumsPage.deleteConfirm", { name: album.name }))
+                              ) {
+                                deleteAlbum.mutate(album.id);
+                              }
+                            }}
+                          >
+                            {t("common.delete")}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <CardContent className="p-4">
+                      <p className="truncate font-medium text-foreground">{album.name}</p>
+                      <p className="text-xs text-muted-foreground">{t("albumsPage.photoCount", { count: album.count })}</p>
                     </CardContent>
                   </Card>
                 );

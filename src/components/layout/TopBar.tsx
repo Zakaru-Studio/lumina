@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useScanControls } from "@/hooks/useScan";
+import { shortcutHint } from "@/lib/platform";
 import { useSelectionStore } from "@/stores/selectionStore";
 import { useUiStore } from "@/stores/uiStore";
 
@@ -16,7 +17,6 @@ import { useUiStore } from "@/stores/uiStore";
 function pageTitleKey(pathname: string): string | null {
   if (pathname === "/") return "nav.library";
   if (pathname.startsWith("/timeline")) return "nav.timeline";
-  if (pathname.startsWith("/search")) return "nav.search";
   if (pathname.startsWith("/albums")) return "nav.albums";
   if (pathname.startsWith("/settings")) return "nav.settings";
   return null;
@@ -64,7 +64,9 @@ export function TopBar() {
       >
         <Search className="h-4 w-4" />
         <span>{t("shell.searchPill")}</span>
-        <kbd className="ml-6 rounded bg-background/60 px-1.5 py-0.5 text-xs">⌘K</kbd>
+        <kbd className="ml-6 rounded bg-background/60 px-1.5 py-0.5 text-xs">
+          {shortcutHint("K")}
+        </kbd>
       </button>
 
       <Button

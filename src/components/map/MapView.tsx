@@ -9,8 +9,10 @@ import type { MapPoint } from "@/types";
 
 import {
   BORDERS_PATH,
+  CITY_LABELS,
   GRATICULE_PATH,
   LAND_PATH,
+  REGION_LABELS,
   SPHERE_PATH,
   VB_H,
   VB_W,
@@ -79,6 +81,55 @@ export function MapView({ points, selectedId, onSelect }: MapViewProps) {
   const placed = useMemo(() => place(points), [points]);
   const zoomLevel = Math.round(Math.log2(k) * 4);
   const clusters = useMemo(() => clusterize(placed, 2 ** (zoomLevel / 4)), [placed, zoomLevel]);
+
+  // Background place-name labels (countries + major cities), recomputed on
+  // pan/zoom. Cheap by construction: it walks two small pre-projected lists,
+  // culls to the viewport, thins overlaps on a coarse grid, and caps how many
+  // render — no tiles, no geocoding, no per-frame projection.
+  const labels = useMemo(() => {
+    type L = { key: string; name: string; cx: number; cy: number; kind: "region" | "city" };
+    const out: L[] = [];
+    const occupied = new Set<string>();
+    const CELL = 44; // viewBox-unit grid: at most one label per cell
+    const cellKey = (cx: number, cy: number) => `${Math.round(cx / CELL)}:${Math.round(cy / CELL)}`;
+    const inView = (cx: number, cy: number) =>
+      cx > -12 && cy > -8 && cx < VB_W + 12 && cy < VB_H + 8;
+
+    // Countries: biggest-first (REGION_LABELS is pre-sorted by area); the number
+    // shown grows with zoom.
+    const regionBudget = Math.round(clamp(12 + Math.log2(k) * 4, 12, 40));
+    let regions = 0;
+    for (const r of REGION_LABELS) {
+      if (regions >= regionBudget) break;
+      const cx = tx + r.x * k;
+      const cy = ty + r.y * k;
+      if (!inView(cx, cy)) continue;
+      const cell = cellKey(cx, cy);
+      if (occupied.has(cell)) continue;
+      occupied.add(cell);
+      out.push({ key: `r:${r.name}`, name: r.name.toUpperCase(), cx, cy, kind: "region" });
+      regions++;
+    }
+
+    // Cities: hidden at the world view, filling in as you zoom past their tier.
+    if (k >= 2) {
+      const cityBudget = Math.round(clamp(Math.log2(k) * 9, 8, 60));
+      let cities = 0;
+      for (const c of CITY_LABELS) {
+        if (cities >= cityBudget) break;
+        if (k < c.minK) continue;
+        const cx = tx + c.x * k;
+        const cy = ty + c.y * k;
+        if (!inView(cx, cy)) continue;
+        const cell = cellKey(cx, cy);
+        if (occupied.has(cell)) continue;
+        occupied.add(cell);
+        out.push({ key: `c:${c.name}`, name: c.name, cx, cy, kind: "city" });
+        cities++;
+      }
+    }
+    return out;
+  }, [k, tx, ty]);
 
   /** Map a client pixel to a point in the SVG's viewBox coordinate system. */
   const clientToVb = useCallback((clientX: number, clientY: number): [number, number] | null => {
@@ -213,6 +264,57 @@ export function MapView({ points, selectedId, onSelect }: MapViewProps) {
             strokeWidth={0.4 / k}
             strokeOpacity={0.7}
           />
+        </g>
+
+        {/* Place-name labels: subtle cartographic context. Drawn in untransformed
+            viewBox space (constant on-screen size) and behind the photo markers.
+            A background-coloured text halo keeps them legible over any land. */}
+        <g className="pointer-events-none select-none">
+          {labels.map((l) =>
+            l.kind === "region" ? (
+              <text
+                key={l.key}
+                x={l.cx}
+                y={l.cy}
+                textAnchor="middle"
+                dominantBaseline="central"
+                className="fill-[hsl(var(--map-label))]"
+                opacity={0.8}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: 0.5,
+                  paintOrder: "stroke",
+                  stroke: "hsl(var(--map-ocean))",
+                  strokeWidth: 2.4,
+                  strokeLinejoin: "round",
+                }}
+              >
+                {l.name}
+              </text>
+            ) : (
+              <g key={l.key} opacity={0.9}>
+                <circle cx={l.cx} cy={l.cy} r={1.3} className="fill-[hsl(var(--map-label))]" />
+                <text
+                  x={l.cx + 3.5}
+                  y={l.cy}
+                  textAnchor="start"
+                  dominantBaseline="central"
+                  className="fill-[hsl(var(--map-label))]"
+                  style={{
+                    fontSize: 8.5,
+                    fontWeight: 500,
+                    paintOrder: "stroke",
+                    stroke: "hsl(var(--map-ocean))",
+                    strokeWidth: 1.8,
+                    strokeLinejoin: "round",
+                  }}
+                >
+                  {l.name}
+                </text>
+              </g>
+            ),
+          )}
         </g>
 
         {/* Markers, drawn in untransformed viewBox space so they keep a constant

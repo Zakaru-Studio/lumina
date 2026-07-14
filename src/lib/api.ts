@@ -18,10 +18,15 @@ import type {
   BackupProgress,
   DedupePlan,
   DeviceInfo,
+  FaceBox,
+  FaceStatus,
   FolderPreview,
+  GeoPlace,
+  GeoSearchResult,
   LibraryStats,
   MapPoint,
   Page,
+  PersonSummary,
   Photo,
   PhotoFilter,
   PhotoQuery,
@@ -48,6 +53,47 @@ export const libraryStats = () => invoke<LibraryStats>("library_stats");
 
 /** All geolocated photos as lightweight points for the map view. */
 export const photosWithGps = () => invoke<MapPoint[]>("photos_with_gps");
+
+/**
+ * Reverse-geocode a coordinate to a place name via the free Nominatim service —
+ * the online fallback used only when the offline gazetteer can't name a point.
+ * Resolves to `null` when nothing matches or the lookup fails. `lang` localizes
+ * the returned names (a UI language code such as `"en"` / `"fr"`).
+ */
+export const reverseGeocode = (lat: number, lon: number, lang: string) =>
+  invoke<GeoPlace | null>("reverse_geocode", { lat, lon, lang });
+
+/** Distinct reverse-geocoded place names present in the cache (for the library
+ * place filter). May be empty until coordinates have been resolved. */
+export const listPlaces = () => invoke<string[]>("list_places");
+
+/** Forward-geocode a free-text place (city / region / country) to a coordinate.
+ * Resolves to `null` when nothing matches or the lookup fails. */
+export const geocodeSearch = (query: string, lang: string) =>
+  invoke<GeoSearchResult | null>("geocode_search", { query, lang });
+
+/** Forward-geocode a free-text address to several ranked matches (address
+ * search box). Empty when nothing matches or the lookup fails. */
+export const geocodeSearchAll = (query: string, lang: string) =>
+  invoke<GeoSearchResult[]>("geocode_search_all", { query, lang });
+
+/** Set (or clear, with `null`) the GPS coordinates of photos. Catalog-only. */
+export const setLocation = (ids: string[], lat: number | null, lon: number | null) =>
+  invoke<void>("set_location", { ids, lat, lon });
+
+/** Read the cached place for a coordinate (no online lookup); null if none. */
+export const getPlace = (lat: number, lon: number, lang: string) =>
+  invoke<GeoPlace | null>("get_place", { lat, lon, lang });
+
+/** Store a user-entered place (city / region / country) for a coordinate. */
+export const setPlace = (
+  lat: number,
+  lon: number,
+  lang: string,
+  city: string | null,
+  region: string | null,
+  country: string | null,
+) => invoke<void>("set_place", { lat, lon, lang, city, region, country });
 
 /** Resolve a renderable URL for a map point's thumbnail (asset protocol). */
 export const mapPointSrc = (point: MapPoint): string | null =>
@@ -91,6 +137,14 @@ export const saveEditedImage = (destPath: string, dataBase64: string) =>
   invoke<string>("save_edited_image", { destPath, dataBase64 });
 
 /**
+ * Encode a base64 PNG (from the editor's canvas) to AVIF at `quality` (1–100) and
+ * save it as a NEW file at `destPath`. Browsers can't encode AVIF from a canvas,
+ * so this path re-encodes backend-side. Returns the saved path.
+ */
+export const saveAvif = (destPath: string, dataBase64: string, quality: number) =>
+  invoke<string>("save_avif", { destPath, dataBase64, quality });
+
+/**
  * Overwrite a photo's ORIGINAL file in place with edited bytes, then refresh its
  * metadata and thumbnail. Destructive — replaces the source file. Catalog fields
  * (rating, color, favorite, tags, albums) are preserved.
@@ -123,6 +177,7 @@ export async function pickSavePath(defaultName: string): Promise<string | null> 
       { name: "JPEG", extensions: ["jpg", "jpeg"] },
       { name: "PNG", extensions: ["png"] },
       { name: "WebP", extensions: ["webp"] },
+      { name: "AVIF", extensions: ["avif"] },
     ],
   });
   return path ?? null;
@@ -292,6 +347,60 @@ export const updateConfig = (config: AppConfig) =>
   invoke<AppConfig>("update_config", { config });
 
 export const aiStatus = () => invoke<AiStatus>("ai_status");
+
+// --- Faces / People (on-device face recognition) ---
+
+/** Full status of the face feature (enabled, models installed, running, counts). */
+export const faceStatus = () => invoke<FaceStatus>("face_status");
+
+/**
+ * Turn face recognition on/off. Enabling downloads the models on first use
+ * (may take a moment) and starts indexing; the returned status reflects the
+ * outcome. Rejects (leaving the feature off) if the model download fails.
+ */
+export const setFaceRecognitionEnabled = (enabled: boolean) =>
+  invoke<FaceStatus>("set_face_recognition_enabled", { enabled });
+
+/** Manually (re)start an indexing pass over photos still lacking faces. */
+export const indexFacesNow = () => invoke<void>("index_faces_now");
+
+/** Erase all face data (faces, people, indexing state). */
+export const clearFaceData = () => invoke<FaceStatus>("clear_face_data");
+
+/** List people (clusters). */
+export const listPeople = (
+  includeHidden: boolean,
+  namedOnly: boolean,
+  minFaces: number,
+) => invoke<PersonSummary[]>("list_people", { includeHidden, namedOnly, minFaces });
+
+export const getPerson = (id: string) =>
+  invoke<PersonSummary | null>("get_person", { id });
+
+/** All face boxes detected in a photo (overlays / corrections). */
+export const facesInPhoto = (photoId: string) =>
+  invoke<FaceBox[]>("faces_in_photo", { photoId });
+
+export const renamePerson = (id: string, name: string | null) =>
+  invoke<void>("rename_person", { id, name: name ?? null });
+
+export const setPersonHidden = (id: string, hidden: boolean) =>
+  invoke<void>("set_person_hidden", { id, hidden });
+
+/** Delete a person and all of its face detections. */
+export const deletePerson = (id: string) =>
+  invoke<void>("delete_person", { id });
+
+/** Merge `sources` into `into`; their faces become confirmed members of the target. */
+export const mergePeople = (sources: string[], into: string) =>
+  invoke<void>("merge_people", { sources, into });
+
+/** Reassign faces to a person (`null` detaches them). */
+export const assignFaces = (faceIds: string[], personId: string | null) =>
+  invoke<void>("assign_faces", { faceIds, personId: personId ?? null });
+
+export const createPerson = (name?: string | null) =>
+  invoke<string>("create_person", { name: name ?? null });
 
 // --- Native dialogs ---
 

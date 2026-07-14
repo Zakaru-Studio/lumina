@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { ImageIcon, SearchX } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
@@ -38,7 +39,10 @@ function isFiltered(query: PhotoQuery): boolean {
   return (
     f.isFavorite === true ||
     f.isRaw === true ||
-    (f.minRating ?? 0) > 0
+    (f.minRating ?? 0) > 0 ||
+    !!f.text ||
+    !!f.place ||
+    !!f.personId
   );
 }
 
@@ -48,8 +52,22 @@ function isFiltered(query: PhotoQuery): boolean {
  */
 export function LibraryPage() {
   const { t } = useTranslation();
-  const [query, setQuery] = useState<PhotoQuery>(() => buildQuery());
-  // Windowed data + lightbox + grid shortcuts (shared with the search view).
+  // A `?q=` link (command palette, a sidebar tag) seeds the free-text filter.
+  const [searchParams] = useSearchParams();
+  const qParam = searchParams.get("q");
+  const [query, setQuery] = useState<PhotoQuery>(() =>
+    buildQuery(qParam ? { filter: { text: qParam } } : undefined),
+  );
+  // Fold later `?q=` navigations into the text filter (initial value handled above).
+  useEffect(() => {
+    if (qParam == null) return;
+    setQuery((prev) =>
+      (prev.filter.text ?? "") === qParam
+        ? prev
+        : { ...prev, filter: { ...prev.filter, text: qParam || undefined }, offset: 0 },
+    );
+  }, [qParam]);
+  // Windowed data + lightbox + grid shortcuts (shared across the browsing views).
   const browser = usePhotoBrowser(query);
   const ids = browser.ids;
   const { data: albums = [] } = useAlbums();

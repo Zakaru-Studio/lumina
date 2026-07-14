@@ -152,6 +152,30 @@ export function useSetCaptureDate() {
   });
 }
 
+/**
+ * Set (or clear, with `null`) the GPS coordinates of photos from the location
+ * editor. Refreshes the affected photo details, the shared lists and the map so
+ * the pin moves immediately.
+ */
+export function useSetLocation() {
+  const invalidate = usePhotoInvalidation();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ids, lat, lon }: { ids: string[]; lat: number | null; lon: number | null }) =>
+      api.setLocation(ids, lat, lon),
+    onSuccess: (_result, { ids }) => {
+      invalidate();
+      ids.forEach((id) => qc.invalidateQueries({ queryKey: qk.photo(id) }));
+      qc.invalidateQueries({ queryKey: qk.map });
+      toast.success("Location updated");
+    },
+    onError: (err) =>
+      toast.error("Could not update location", {
+        description: err instanceof Error ? err.message : String(err),
+      }),
+  });
+}
+
 /** Restore soft-deleted photos (used by the remove Undo action). */
 export function useRestorePhotos() {
   const invalidate = usePhotoInvalidation();

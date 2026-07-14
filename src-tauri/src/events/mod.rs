@@ -28,6 +28,12 @@ pub mod names {
     pub const BACKUP_PROGRESS: &str = "backup://progress";
     /// A backup run finished ([`super::BackupSummary`]).
     pub const BACKUP_DONE: &str = "backup://done";
+    /// Face-indexing progress ([`super::FaceProgress`]).
+    pub const FACE_PROGRESS: &str = "face://progress";
+    /// A face-indexing run finished ([`super::FaceSummary`]).
+    pub const FACE_DONE: &str = "face://done";
+    /// People clusters changed (renamed/merged/assigned) — refetch the People UI.
+    pub const PEOPLE_CHANGED: &str = "people://changed";
 }
 
 /// Phase of the scan pipeline, surfaced for progress UIs.
@@ -117,6 +123,33 @@ pub struct BackupSummary {
     pub skipped: u64,
     pub failed: u64,
     pub bytes_copied: u64,
+    pub duration_ms: u128,
+}
+
+/// Incremental face-indexing progress payload.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FaceProgress {
+    /// Photos scanned for faces so far.
+    pub processed: u64,
+    /// Total photos queued for this indexing run.
+    pub total: u64,
+    /// Faces detected so far this run.
+    pub faces: u64,
+    /// Distinct people (clusters) known so far.
+    pub people: u64,
+    /// Human-readable current item (e.g. filename), for a status line.
+    pub current: Option<String>,
+}
+
+/// Emitted once a face-indexing run completes.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FaceSummary {
+    pub photos_processed: u64,
+    pub faces_detected: u64,
+    pub people: u64,
+    pub failed: u64,
     pub duration_ms: u128,
 }
 

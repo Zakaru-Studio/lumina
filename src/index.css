@@ -59,6 +59,7 @@
     --map-land: 220 15% 83%;
     --map-border: 220 14% 72%;
     --map-graticule: 220 24% 89%;
+    --map-label: 220 22% 38%;
   }
 
   .dark {
@@ -95,6 +96,7 @@
     --map-land: 225 16% 22%;
     --map-border: 225 14% 33%;
     --map-graticule: 225 22% 17%;
+    --map-label: 225 14% 66%;
   }
 }
 

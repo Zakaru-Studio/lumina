@@ -23,12 +23,22 @@ export interface AdjustParams {
   brightness: number;
   /** Contrast, −100..100 (0 neutral) — CSS `contrast`. */
   contrast: number;
+  /** Highlights, −100..100 (0 neutral) — luminance-masked shift of bright tones. */
+  highlights: number;
+  /** Shadows, −100..100 (0 neutral) — luminance-masked shift of dark tones. */
+  shadows: number;
+  /** Whites, −100..100 (0 neutral) — luminance-masked shift of the brightest tones. */
+  whites: number;
+  /** Blacks, −100..100 (0 neutral) — luminance-masked shift of the darkest tones. */
+  blacks: number;
   /** Saturation, −100..100 (0 neutral) — CSS `saturate`. */
   saturation: number;
   /** Vibrance, −100..100 (0 neutral) — smart saturation (pixel pass). */
   vibrance: number;
-  /** Warmth / temperature, −100..100 (0 neutral) — R/B channel tint. */
+  /** Warmth / temperature, −100..100 (0 neutral) — blue↔yellow R/B channel tint. */
   warmth: number;
+  /** Tint, −100..100 (0 neutral) — green↔magenta shift on the green channel. */
+  tint: number;
   /** Clarity, −100..100 (0 neutral) — large-radius local contrast. */
   clarity: number;
   /** Sharpness, 0..100 (0 neutral) — 3×3 unsharp mask. */
@@ -82,9 +92,14 @@ export const DEFAULT_ADJUST: AdjustParams = {
   exposure: 0,
   brightness: 0,
   contrast: 0,
+  highlights: 0,
+  shadows: 0,
+  whites: 0,
+  blacks: 0,
   saturation: 0,
   vibrance: 0,
   warmth: 0,
+  tint: 0,
   clarity: 0,
   sharpness: 0,
   vignette: 0,

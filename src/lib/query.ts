@@ -42,8 +42,14 @@ export const qk = {
   album: (id: string) => ["albums", id] as const,
   albumPhotos: (id: string, query: PhotoQuery) => ["albums", id, "photos", query] as const,
   watchedFolders: ["watchedFolders"] as const,
+  places: ["places"] as const,
   config: ["config"] as const,
   aiStatus: ["aiStatus"] as const,
+  faceStatus: ["faceStatus"] as const,
+  people: (opts: { includeHidden: boolean; namedOnly: boolean; minFaces: number }) =>
+    ["people", opts] as const,
+  person: (id: string) => ["people", "detail", id] as const,
+  facesInPhoto: (photoId: string) => ["faces", "photo", photoId] as const,
 };
 
 /** Build a default [`PhotoQuery`] with an optional filter/sort override. */

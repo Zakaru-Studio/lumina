@@ -185,10 +185,10 @@ fn smart_albums_are_seeded() {
     let (_dir, db) = temp_db();
     let conn = db.get().unwrap();
     let list = albums::list(&conn, 1_700_000_000).unwrap();
-    // Seven built-in smart albums (Today, Week, Month, Favorites, RAW, Videos,
+    // Six built-in smart albums (Today, Week, Month, Favorites, Videos,
     // Duplicates).
     let smart = list.iter().filter(|a| a.rule.is_some()).count();
-    assert_eq!(smart, 7);
+    assert_eq!(smart, 6);
 }
 
 #[test]
@@ -341,4 +341,37 @@ fn smart_album_favorites_filter() {
         1_700_000_000,
     );
     assert_eq!(photos::count(&conn, &filter).unwrap(), 1);
+}
+
+#[test]
+fn geocache_caches_places_by_cell_and_language() {
+    use lumina_lib::core::models::GeoPlace;
+    use lumina_lib::database::geocache;
+
+    let (_dir, db) = temp_db();
+    let conn = db.get().unwrap();
+
+    // Miss on an empty cache.
+    assert!(geocache::get(&conn, 48_857, 2_352, "en").unwrap().is_none());
+
+    // Store, then read the same grid cell + language back.
+    let paris = GeoPlace {
+        city: Some("Paris".into()),
+        region: Some("Île-de-France".into()),
+        country: Some("France".into()),
+    };
+    geocache::put(&conn, 48_857, 2_352, "en", &paris, 1_700_000_000).unwrap();
+    let hit = geocache::get(&conn, 48_857, 2_352, "en").unwrap().expect("cached row");
+    assert_eq!(hit.city.as_deref(), Some("Paris"));
+    assert_eq!(hit.country.as_deref(), Some("France"));
+
+    // A different language is a distinct entry (names are localized).
+    assert!(geocache::get(&conn, 48_857, 2_352, "fr").unwrap().is_none());
+
+    // Re-storing the same cell replaces in place rather than duplicating.
+    let updated = GeoPlace { city: Some("Paris 1er".into()), region: None, country: Some("France".into()) };
+    geocache::put(&conn, 48_857, 2_352, "en", &updated, 1_700_000_100).unwrap();
+    let hit2 = geocache::get(&conn, 48_857, 2_352, "en").unwrap().unwrap();
+    assert_eq!(hit2.city.as_deref(), Some("Paris 1er"));
+    assert_eq!(hit2.region, None);
 }
