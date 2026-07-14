@@ -123,7 +123,9 @@ export function TimelinePage() {
   const select = useSelectionStore((s) => s.select);
   const toggle = useSelectionStore((s) => s.toggle);
   const selectRange = useSelectionStore((s) => s.selectRange);
-  const selected = useSelectionStore((s) => s.selected);
+  // Each PhotoCell reads its own `selected.has(id)` (see PhotoGrid), so the full
+  // selection Set is deliberately not subscribed here — selecting doesn't
+  // re-render the timeline grid.
 
   const handleClick = useCallback(
     (e: MouseEvent, id: string) => {
@@ -431,10 +433,10 @@ export function TimelinePage() {
                   {id && photo ? (
                     <PhotoCell
                       photo={photo}
-                      selected={selected.has(id)}
-                      onClick={(e) => handleClick(e, id)}
-                      onOpen={() => setIndex(gi)}
-                      onDragStart={(e) => handleDragStart(e, id)}
+                      index={gi}
+                      onClick={handleClick}
+                      onOpen={setIndex}
+                      onDragStart={handleDragStart}
                     />
                   ) : (
                     <Skeleton className="h-full w-full rounded-lg" />

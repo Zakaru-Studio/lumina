@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import * as api from "@/lib/api";
 import { qk } from "@/lib/query";
 import { DEDUPE_EXIT_MS, useDedupeExitStore } from "@/stores/dedupeExitStore";
+import type { Photo } from "@/types";
 
 function usePhotoInvalidation() {
   const qc = useQueryClient();
@@ -16,6 +17,54 @@ function usePhotoInvalidation() {
     qc.invalidateQueries({ queryKey: qk.photos });
     qc.invalidateQueries({ queryKey: qk.stats });
     qc.invalidateQueries({ queryKey: qk.albums });
+  };
+}
+
+/**
+ * Patch cached {@link Photo} objects in place across the shapes react-query
+ * holds them in — paginated lists (`{ items }`), infinite-query pages
+ * (`{ pages: [{ items }] }`) and single details (`{ id }`) — leaving any other
+ * shape (notably the plain `string[]` id lists) untouched.
+ */
+function patchCachedPhotos(old: unknown, apply: (p: Photo) => Photo): unknown {
+  if (!old || typeof old !== "object") return old;
+  const o = old as Record<string, unknown>;
+  if (Array.isArray(o.items)) return { ...o, items: (o.items as Photo[]).map(apply) };
+  if (Array.isArray(o.pages)) {
+    return {
+      ...o,
+      pages: (o.pages as unknown[]).map((pg) => {
+        const p = pg as Record<string, unknown> | null;
+        return p && Array.isArray(p.items) ? { ...p, items: (p.items as Photo[]).map(apply) } : pg;
+      }),
+    };
+  }
+  if (typeof o.id === "string") return apply(old as Photo);
+  return old;
+}
+
+/**
+ * Optimistically patch a single field of the given photos across every cached
+ * list/detail, instead of invalidating. The old `usePhotoInvalidation` refetched
+ * the *entire* ordered id list (up to tens of thousands of ids over IPC) plus
+ * every loaded window page on **each** rating/favorite change — pressing `1`–`5`
+ * or `F` did this per keystroke. Here the visible grid updates instantly and the
+ * id lists are only marked stale (`refetchType: "none"`), so a view filtered or
+ * sorted by the changed field reconciles on its next mount/navigation rather than
+ * churning live.
+ */
+function usePhotoFieldPatch() {
+  const qc = useQueryClient();
+  return (ids: string[], patch: (p: Photo) => Photo) => {
+    const set = new Set(ids);
+    const apply = (p: Photo) => (set.has(p.id) ? patch(p) : p);
+    qc.setQueriesData({ queryKey: qk.photos }, (old) => patchCachedPhotos(old, apply));
+    qc.setQueriesData({ queryKey: qk.albums }, (old) => patchCachedPhotos(old, apply));
+    qc.invalidateQueries({ queryKey: qk.stats });
+    // Mark ordered lists stale without a live refetch (they rarely reorder on a
+    // rating/favorite change; a filtered/sorted view refreshes on next mount).
+    qc.invalidateQueries({ queryKey: qk.photos, refetchType: "none" });
+    qc.invalidateQueries({ queryKey: qk.albums, refetchType: "none" });
   };
 }
 
@@ -61,20 +110,20 @@ function plural(n: number, one: string, many = `${one}s`): string {
 }
 
 export function useSetRating() {
-  const invalidate = usePhotoInvalidation();
+  const patch = usePhotoFieldPatch();
   return useMutation({
     mutationFn: ({ ids, rating }: { ids: string[]; rating: number }) =>
       api.setRating(ids, rating),
-    onSuccess: invalidate,
+    onSuccess: (_result, { ids, rating }) => patch(ids, (p) => ({ ...p, rating })),
   });
 }
 
 export function useSetFavorite() {
-  const invalidate = usePhotoInvalidation();
+  const patch = usePhotoFieldPatch();
   return useMutation({
     mutationFn: ({ ids, favorite }: { ids: string[]; favorite: boolean }) =>
       api.setFavorite(ids, favorite),
-    onSuccess: invalidate,
+    onSuccess: (_result, { ids, favorite }) => patch(ids, (p) => ({ ...p, isFavorite: favorite })),
   });
 }
 

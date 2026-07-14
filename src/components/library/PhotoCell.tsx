@@ -1,41 +1,32 @@
+import { memo } from "react";
 import type { DragEvent, MouseEvent } from "react";
-import { Check, FolderMinus, FolderOpen, Heart, Pencil, SlidersHorizontal, Star, Trash2 } from "lucide-react";
+import { Check, Heart } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { toast } from "sonner";
 
 import { StarRating } from "@/components/common/StarRating";
+import { PhotoCellMenu } from "@/components/library/PhotoCellMenu";
 import { Thumbnail } from "@/components/library/Thumbnail";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuSub,
-  ContextMenuSubContent,
-  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { useAlbums, useAddToAlbum, useRemoveFromAlbum } from "@/hooks/useAlbums";
-import { useSetFavorite, useSetRating } from "@/hooks/usePhotoMutations";
-import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useAlbumContext } from "@/stores/albumContextStore";
 import { useDedupeExitStore } from "@/stores/dedupeExitStore";
-import { useDeleteDialog } from "@/stores/deleteDialogStore";
-import { useEditorStore } from "@/stores/editorStore";
-import { useRenamePhoto } from "@/stores/renamePhotoStore";
 import { useSelectionStore } from "@/stores/selectionStore";
 import type { Photo } from "@/types";
 
-/** Props for {@link PhotoCell}. */
+/** Props for {@link PhotoCell}. Handlers take the photo id/index so the parent
+ * can pass ONE stable callback for every cell (keeping {@link PhotoCell} memoised). */
 export interface PhotoCellProps {
   photo: Photo;
-  selected: boolean;
+  /** Flat index of this photo, passed to `onOpen`. */
+  index: number;
   /** Modifier-click (Ctrl/Cmd toggle, Shift range) for selection. */
-  onClick: (e: MouseEvent) => void;
-  /** Open in the lightbox — triggered by a plain (unmodified) click. */
-  onOpen: () => void;
-  onDragStart?: (e: DragEvent) => void;
+  onClick: (e: MouseEvent, id: string) => void;
+  /** Open the photo (by flat index) in the lightbox — plain (unmodified) click. */
+  onOpen: (index: number) => void;
+  onDragStart?: (e: DragEvent, id: string) => void;
 }
 
 /**
@@ -45,43 +36,24 @@ export interface PhotoCellProps {
  * primary ring and subtle scale; favorite and rating metadata reveal on
  * hover (and stay visible when set).
  *
- * Right-clicking opens a context menu of non-destructive actions (rating,
- * favorite, album, reveal, remove). Actions target the whole current
- * selection when the right-clicked photo is part of it, otherwise this photo.
+ * Perf: memoised, and it subscribes to *only its own* selected flag
+ * (`selected.has(id)`) rather than receiving `selected` as a prop — so toggling
+ * the selection re-renders just the cell(s) whose state changed, not the whole
+ * grid. Its right-click actions live in {@link PhotoCellMenu}, mounted lazily by
+ * Radix only while the menu is open.
  */
-export function PhotoCell({ photo, selected, onClick, onOpen, onDragStart }: PhotoCellProps) {
+export const PhotoCell = memo(function PhotoCell({
+  photo,
+  index,
+  onClick,
+  onOpen,
+  onDragStart,
+}: PhotoCellProps) {
   const { t } = useTranslation();
   const hasMeta = photo.rating > 0;
+  const selected = useSelectionStore((s) => s.selected.has(photo.id));
   // True while this copy is animating out after a smart-dedupe removal.
   const exiting = useDedupeExitStore((s) => s.ids.has(photo.id));
-
-  const { data: albums = [] } = useAlbums();
-  const setRating = useSetRating();
-  const setFavorite = useSetFavorite();
-  const addToAlbum = useAddToAlbum();
-  const removeFromAlbum = useRemoveFromAlbum();
-
-  // Album currently being viewed (manual only), for "remove from this album".
-  const albumCtxId = useAlbumContext((s) => s.albumId);
-  const albumCtxName = useAlbumContext((s) => s.albumName);
-
-  const manualAlbums = albums.filter((a) => a.kind === "manual");
-
-  /** Resolve the ids this menu acts on: the selection (if the photo is in it),
-   * otherwise just this photo. */
-  const targetIds = (): string[] => {
-    const { selected: sel } = useSelectionStore.getState();
-    return sel.has(photo.id) ? Array.from(sel) : [photo.id];
-  };
-
-  /** Reveal the original file in the OS file manager. */
-  const reveal = async (): Promise<void> => {
-    try {
-      await api.revealInExplorer(photo.path);
-    } catch {
-      toast.error(t("gallery.revealError"));
-    }
-  };
 
   return (
     <ContextMenu>
@@ -102,11 +74,11 @@ export function PhotoCell({ photo, selected, onClick, onOpen, onDragStart }: Pho
             // A plain click opens the viewer directly; modifier-clicks
             // (Ctrl/Cmd toggle, Shift range) select instead. Selecting without
             // opening is still available via the hover checkbox (top-right).
-            if (e.shiftKey || e.ctrlKey || e.metaKey) onClick(e);
-            else onOpen();
+            if (e.shiftKey || e.ctrlKey || e.metaKey) onClick(e, photo.id);
+            else onOpen(index);
           }}
-          onDoubleClick={onOpen}
-          onDragStart={onDragStart}
+          onDoubleClick={() => onOpen(index)}
+          onDragStart={(e) => onDragStart?.(e, photo.id)}
         >
           <Thumbnail photo={photo} />
 
@@ -120,7 +92,7 @@ export function PhotoCell({ photo, selected, onClick, onOpen, onDragStart }: Pho
               // Shift extends the range from the last-clicked checkbox: defer to
               // the page handler, which owns the ordered id list. Plain/Ctrl just
               // toggles this photo (and updates the range anchor).
-              if (e.shiftKey) onClick(e);
+              if (e.shiftKey) onClick(e, photo.id);
               else useSelectionStore.getState().toggle(photo.id);
             }}
             onDoubleClick={(e) => e.stopPropagation()}
@@ -157,108 +129,8 @@ export function PhotoCell({ photo, selected, onClick, onOpen, onDragStart }: Pho
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-52">
-        {/* Edit in the non-destructive editor */}
-        <ContextMenuItem onSelect={() => useEditorStore.getState().open(photo.id)}>
-          <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-          {t("gallery.edit")}
-        </ContextMenuItem>
-
-        <ContextMenuSeparator />
-
-        {/* Rating */}
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <Star className="h-4 w-4 text-muted-foreground" />
-            {t("gallery.rating")}
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            {[5, 4, 3, 2, 1, 0].map((rating) => (
-              <ContextMenuItem
-                key={rating}
-                onSelect={() => setRating.mutate({ ids: targetIds(), rating })}
-              >
-                {rating === 0 ? (
-                  <span className="text-muted-foreground">{t("gallery.noRating")}</span>
-                ) : (
-                  <span className="text-primary">{"★".repeat(rating)}</span>
-                )}
-              </ContextMenuItem>
-            ))}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-
-        {/* Favorite */}
-        <ContextMenuItem
-          onSelect={() =>
-            setFavorite.mutate({ ids: targetIds(), favorite: !photo.isFavorite })
-          }
-        >
-          <Heart className={cn("h-4 w-4", photo.isFavorite && "fill-current text-red-500")} />
-          {photo.isFavorite ? t("gallery.unfavorite") : t("gallery.favorite")}
-        </ContextMenuItem>
-
-        {/* Add to album */}
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>
-            <FolderOpen className="h-4 w-4 text-muted-foreground" />
-            {t("gallery.addToAlbum")}
-          </ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            {manualAlbums.length === 0 ? (
-              <ContextMenuItem disabled>{t("gallery.noAlbumsYet")}</ContextMenuItem>
-            ) : (
-              manualAlbums.map((album) => (
-                <ContextMenuItem
-                  key={album.id}
-                  onSelect={() =>
-                    addToAlbum.mutate({ albumId: album.id, photoIds: targetIds() })
-                  }
-                >
-                  {album.name}
-                </ContextMenuItem>
-              ))
-            )}
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-
-        {/* Remove from the album currently being viewed (manual albums only) */}
-        {albumCtxId ? (
-          <ContextMenuItem
-            onSelect={() =>
-              removeFromAlbum.mutate({ albumId: albumCtxId, photoIds: targetIds() })
-            }
-          >
-            <FolderMinus className="h-4 w-4 text-muted-foreground" />
-            {albumCtxName
-              ? t("gallery.removeFromNamedAlbum", { album: albumCtxName })
-              : t("gallery.removeFromAlbum")}
-          </ContextMenuItem>
-        ) : null}
-
-        <ContextMenuSeparator />
-
-        <ContextMenuItem
-          onSelect={() =>
-            useRenamePhoto.getState().open({ id: photo.id, filename: photo.filename })
-          }
-        >
-          <Pencil className="h-4 w-4 text-muted-foreground" />
-          {t("common.rename")}
-        </ContextMenuItem>
-
-        <ContextMenuItem onSelect={reveal}>
-          <FolderOpen className="h-4 w-4 text-muted-foreground" />
-          {t("gallery.revealInExplorer")}
-        </ContextMenuItem>
-
-        <ContextMenuItem
-          className="text-destructive focus:text-destructive"
-          onSelect={() => useDeleteDialog.getState().open(targetIds())}
-        >
-          <Trash2 className="h-4 w-4" />
-          {t("common.delete")}
-        </ContextMenuItem>
+        <PhotoCellMenu photo={photo} />
       </ContextMenuContent>
     </ContextMenu>
   );
-}
+});

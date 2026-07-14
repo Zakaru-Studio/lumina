@@ -43,7 +43,9 @@ export function PhotoGrid({ ids, getPhoto, onOpen, onVisibleRangeChange }: Photo
   const select = useSelectionStore((s) => s.select);
   const toggle = useSelectionStore((s) => s.toggle);
   const selectRange = useSelectionStore((s) => s.selectRange);
-  const selected = useSelectionStore((s) => s.selected);
+  // NB: the current selection Set is deliberately NOT subscribed here — each
+  // PhotoCell reads its own `selected.has(id)`, so toggling selection re-renders
+  // only the affected cell(s) rather than the whole grid.
   const anchor = useSelectionStore((s) => s.anchor);
 
   // Measure the container's CONTENT width (excludes padding and the scrollbar)
@@ -163,10 +165,10 @@ export function PhotoGrid({ ids, getPhoto, onOpen, onVisibleRangeChange }: Photo
                     {photo ? (
                       <PhotoCell
                         photo={photo}
-                        selected={selected.has(id)}
-                        onClick={(e) => handleClick(e, id)}
-                        onOpen={() => onOpen(index)}
-                        onDragStart={(e) => handleDragStart(e, id)}
+                        index={index}
+                        onClick={handleClick}
+                        onOpen={onOpen}
+                        onDragStart={handleDragStart}
                       />
                     ) : (
                       <Skeleton className="h-full w-full rounded-lg" />
