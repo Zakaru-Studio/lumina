@@ -19,6 +19,9 @@ pub mod names {
     pub const LIBRARY_CHANGED: &str = "library://changed";
     /// A thumbnail became available ([`super::ThumbReady`]).
     pub const THUMB_READY: &str = "thumb://ready";
+    /// Every thumbnail was regenerated (e.g. after a size change) — the UI should
+    /// bust its cached thumbnail URLs.
+    pub const THUMBS_REGENERATED: &str = "thumb://regenerated";
 }
 
 /// Phase of the scan pipeline, surfaced for progress UIs.
@@ -42,6 +45,9 @@ pub struct ScanProgress {
     pub indexed: u64,
     /// Thumbnails generated so far.
     pub thumbnailed: u64,
+    /// Tasks fully processed so far (indexed *or* thumbnailed). Reaches `total`
+    /// exactly on completion — the authoritative measure for the progress bar.
+    pub processed: u64,
     /// Total files known to need processing (best estimate; may grow).
     pub total: u64,
     /// Human-readable current item (e.g. filename), for a status line.

@@ -1,6 +1,9 @@
 import { Outlet } from "react-router-dom";
 
 import { CommandPalette } from "@/components/command/CommandPalette";
+import { ImageEditor } from "@/components/editor/ImageEditor";
+import { DeletePhotosDialog } from "@/components/library/DeletePhotosDialog";
+import { ImportAlbumsDialog } from "@/components/library/ImportAlbumsDialog";
 import { ScanProgressBar } from "@/components/layout/ScanProgressBar";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
@@ -32,6 +35,9 @@ export function AppShell() {
           </main>
         </div>
         <CommandPalette />
+        <ImageEditor />
+        <DeletePhotosDialog />
+        <ImportAlbumsDialog />
         <Toaster />
       </div>
     </TooltipProvider>

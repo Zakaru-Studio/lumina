@@ -9,6 +9,23 @@ Built with **Tauri v2 (Rust)** + **React + TypeScript**. No Electron.
 
 ---
 
+## Download
+
+Grab the latest Windows installer from the
+[**Releases**](https://github.com/Zakaru-Studio/lumina/releases/latest) page
+(`Lumina_x.y.z_x64-setup.exe`). Windows 11 ships with the required WebView2
+runtime; on older Windows the installer fetches it automatically.
+
+Lumina **auto-updates**: on launch it quietly checks for a newer signed release
+and, if one exists, offers to install and restart. You can also check manually
+from **Settings → About → Check for updates**. Only updates whose signature
+matches the key baked into the app are ever installed.
+
+> Currently only **Windows** builds are published. macOS/Linux users can build
+> from source (below).
+
+---
+
 ## Highlights
 
 - **Blazing library browsing** — virtualized grid stays fluid at 300k+ photos
@@ -161,6 +178,51 @@ the `heic` cargo feature stub). Video is architected but not implemented.
 
 ---
 
+## Releasing (maintainers)
+
+Releases are cut **locally** from a Windows machine with one command. The build
+produces a **signed** NSIS installer and an updater manifest (`latest.json`);
+the GitHub Release hosts both, and installed apps pick up the update from
+`releases/latest/download/latest.json`.
+
+**One-time setup**
+
+1. Install and authenticate the GitHub CLI: `gh auth login`.
+2. Generate the updater signing keypair (once, ever):
+   ```bash
+   npx tauri signer generate -w "$USERPROFILE/.tauri/lumina.key"
+   ```
+   Put the **public** key in `src-tauri/tauri.conf.json`
+   (`plugins.updater.pubkey`) — this ties every future update to your key.
+3. Create a **gitignored** `.env.release` at the repo root with the private-key
+   path and its password (never commit these):
+   ```ini
+   LUMINA_SIGNING_KEY_PATH=C:\Users\you\.tauri\lumina.key
+   TAURI_SIGNING_PRIVATE_KEY_PASSWORD=your-key-password
+   ```
+
+**Cutting a release**
+
+```bash
+node scripts/release.mjs 0.2.0 "What changed in this version"
+```
+
+This validates a clean tree + auth + signing, bumps the version everywhere,
+builds and signs the installer, writes `latest.json`, commits, tags `v0.2.0`,
+pushes, and creates the GitHub Release with the installer + manifest attached.
+
+Inside Claude Code you can run the same flow with **`/release 0.2.0 "notes"`**.
+
+> The signing **private key** and its password are the only things that let you
+> publish an update users will accept. Keep them safe and off the repo. Losing
+> the key means shipping a new pubkey (and a non-updating transition build).
+
+---
+
 ## License
 
-Provided as-is for local, personal use.
+Lumina is free software licensed under the **GNU General Public License v3.0**
+(GPL-3.0-only). You may use, study, share and modify it; distributed derivative
+works must remain under the GPL. See [LICENSE](LICENSE) for the full text.
+
+Copyright © Zakaru Studio.

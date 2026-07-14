@@ -29,6 +29,11 @@ pub struct ScanCounters {
     pub discovered: AtomicU64,
     pub indexed: AtomicU64,
     pub thumbnailed: AtomicU64,
+    /// Tasks fully processed (each discovery task is *either* an index or a
+    /// thumbnail job, so this reaches `total` exactly). Drives the single
+    /// determinate progress measure; `indexed`/`thumbnailed` are per-kind tallies
+    /// that don't sum to `total` (an index task also produces a thumbnail).
+    pub processed: AtomicU64,
     pub total: AtomicU64,
 }
 
@@ -37,6 +42,7 @@ impl ScanCounters {
         self.discovered.store(0, Ordering::Relaxed);
         self.indexed.store(0, Ordering::Relaxed);
         self.thumbnailed.store(0, Ordering::Relaxed);
+        self.processed.store(0, Ordering::Relaxed);
         self.total.store(0, Ordering::Relaxed);
     }
 
@@ -47,6 +53,7 @@ impl ScanCounters {
             discovered: self.discovered.load(Ordering::Relaxed),
             indexed: self.indexed.load(Ordering::Relaxed),
             thumbnailed: self.thumbnailed.load(Ordering::Relaxed),
+            processed: self.processed.load(Ordering::Relaxed),
             total: self.total.load(Ordering::Relaxed),
             current,
         }
@@ -105,6 +112,24 @@ impl ScanManager {
     /// completion are delivered via events. If a scan is already running the
     /// request is ignored (the watcher will re-trigger later).
     pub fn spawn_scan(self: &Arc<Self>, roots: Vec<PathBuf>) {
+        self.spawn_inner(roots, None);
+    }
+
+    /// Like [`spawn_scan`], but assigns freshly-scanned photos to albums per the
+    /// `folder path -> album id` plan once indexing succeeds, before completion.
+    pub fn spawn_scan_with_albums(
+        self: &Arc<Self>,
+        roots: Vec<PathBuf>,
+        folder_albums: std::collections::HashMap<String, String>,
+    ) {
+        self.spawn_inner(roots, Some(folder_albums));
+    }
+
+    fn spawn_inner(
+        self: &Arc<Self>,
+        roots: Vec<PathBuf>,
+        album_plan: Option<std::collections::HashMap<String, String>>,
+    ) {
         if self
             .running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -117,6 +142,22 @@ impl ScanManager {
         std::thread::spawn(move || {
             this.counters.reset();
             let result = pipeline::run(&this, roots);
+            if result.is_ok() {
+                if let Some(plan) = &album_plan {
+                    match this.db.get() {
+                        Ok(conn) => {
+                            if let Err(e) = crate::database::albums::assign_by_folder(
+                                &conn,
+                                plan,
+                                crate::api::now(),
+                            ) {
+                                warn!(error = %e, "album assignment failed");
+                            }
+                        }
+                        Err(e) => warn!(error = %e, "album assignment: db unavailable"),
+                    }
+                }
+            }
             match &result {
                 Ok(summary) => info!(?summary, "scan complete"),
                 Err(e) => warn!(error = %e, "scan failed"),
@@ -125,6 +166,40 @@ impl ScanManager {
             if let Ok(summary) = result {
                 events::emit(&this.app, events::names::SCAN_DONE, summary);
             }
+            events::emit(&this.app, events::names::LIBRARY_CHANGED, ());
+        });
+    }
+
+    /// Regenerate every thumbnail at the currently configured size. Drops the
+    /// existing grid thumbnails first, then runs the normal pipeline (which
+    /// rebuilds any missing thumbnail). Emits `THUMBS_REGENERATED` on completion
+    /// so the UI can bust its cached thumbnail URLs.
+    pub fn spawn_regenerate_thumbnails(self: &Arc<Self>, roots: Vec<PathBuf>) {
+        if self
+            .running
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            warn!("scan already running; ignoring thumbnail-regenerate request");
+            return;
+        }
+        let this = Arc::clone(self);
+        std::thread::spawn(move || {
+            let root = this.thumb_root();
+            if let Err(e) = this.thumbnails.clear_grid_thumbnails(&root) {
+                warn!(error = %e, "failed to clear thumbnails before regenerate");
+            }
+            this.counters.reset();
+            let result = pipeline::run(&this, roots);
+            match &result {
+                Ok(summary) => info!(?summary, "thumbnail regeneration complete"),
+                Err(e) => warn!(error = %e, "thumbnail regeneration failed"),
+            }
+            this.running.store(false, Ordering::SeqCst);
+            if let Ok(summary) = result {
+                events::emit(&this.app, events::names::SCAN_DONE, summary);
+            }
+            events::emit(&this.app, events::names::THUMBS_REGENERATED, ());
             events::emit(&this.app, events::names::LIBRARY_CHANGED, ());
         });
     }

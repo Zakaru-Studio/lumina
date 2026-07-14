@@ -1,9 +1,11 @@
 //! Thumbnail generation: decode → orient → high-quality downscale → WebP.
 //!
 //! Downscaling uses `fast_image_resize` (SIMD Lanczos3) for speed and quality.
-//! Output is written as WebP to the cache. RAW/HEIC decoding is not attempted
-//! in the MVP; such inputs yield [`Error::Unsupported`] and the caller records
-//! a `failed` thumbnail status without dropping the catalog entry.
+//! Output is written as WebP to the cache. Decoding is delegated to
+//! [`super::decode`], which handles standard rasters, camera RAW (embedded
+//! preview) and video (ffmpeg poster frame). Inputs that still can't be decoded
+//! yield [`Error::Unsupported`] and the caller records a `failed` thumbnail
+//! status without dropping the catalog entry.
 
 use std::io::Cursor;
 use std::path::Path;
@@ -13,6 +15,7 @@ use fast_image_resize::{PixelType, ResizeOptions, Resizer};
 use image::{DynamicImage, ImageFormat, RgbaImage};
 
 use crate::core::error::{Error, Result};
+use crate::thumbnail::decode;
 
 /// Compute the target size that fits `(w, h)` within `max_edge` without
 /// upscaling, preserving aspect ratio (min 1px).
@@ -46,18 +49,9 @@ fn apply_orientation(img: DynamicImage, orientation: u16) -> DynamicImage {
 ///
 /// Returns the `(width, height)` of the generated thumbnail.
 pub fn generate(src: &Path, dst: &Path, max_edge: u32, orientation: u16) -> Result<(u32, u32)> {
-    // Decode, guessing the real format from magic bytes rather than trusting
-    // the file extension (handles e.g. a PNG saved as `.jpg`). Unsupported
-    // formats (RAW/HEIC) surface as a clear error.
-    let decoded = image::ImageReader::open(src)?
-        .with_guessed_format()?
-        .decode()
-        .map_err(|e| match e {
-            image::ImageError::Unsupported(_) => {
-                Error::Unsupported(format!("cannot decode {}", src.display()))
-            }
-            other => Error::Image(other),
-        })?;
+    // Decode the source (standard raster, RAW embedded preview, or video frame).
+    // Undecodable inputs surface as a clear error the caller records as failed.
+    let decoded = decode::load_displayable(src)?;
 
     let oriented = apply_orientation(decoded, orientation);
     let (w, h) = (oriented.width(), oriented.height());

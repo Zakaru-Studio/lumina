@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { DragEvent } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
   Aperture,
@@ -30,14 +32,46 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  useAddToAlbum,
   useAlbums,
   useCreateAlbum,
   useDeleteAlbum,
   useRenameAlbum,
 } from "@/hooks/useAlbums";
+import { albumLabel } from "@/lib/albumLabel";
+import { albumOptions } from "@/lib/albumTree";
 import type { Album } from "@/types";
+
+/** Sentinel Select value for "no parent" (Radix Select forbids empty values). */
+const ROOT_VALUE = "__root__";
+
+/** Presets whose smart album should be hidden while it has no matching media. */
+const HIDE_WHEN_EMPTY = new Set(["today", "week", "month"]);
+
+/** Whether a smart album should be hidden right now (empty date-based view). */
+function isHiddenSmart(album: Album): boolean {
+  const preset = (album.rule?.preset as string | undefined) ?? "";
+  return HIDE_WHEN_EMPTY.has(preset) && album.count === 0;
+}
+
+/** Extract dragged photo ids from a drop event (empty if none/invalid). */
+function parseDragIds(e: DragEvent): string[] {
+  try {
+    const raw = e.dataTransfer.getData("application/x-lumina-ids");
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 /** Map a backend album icon name to a lucide icon, with a fallback. */
 function albumIcon(name: string | null): LucideIcon {
@@ -66,30 +100,39 @@ function albumIcon(name: string | null): LucideIcon {
  * Supports creating, renaming and deleting manual albums.
  */
 export function AlbumsPage() {
+  const { t } = useTranslation();
   const { data: albums = [], isLoading } = useAlbums();
   const navigate = useNavigate();
 
   const createAlbum = useCreateAlbum();
   const renameAlbum = useRenameAlbum();
   const deleteAlbum = useDeleteAlbum();
+  const addToAlbum = useAddToAlbum();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newParent, setNewParent] = useState<string>(ROOT_VALUE);
   const [renaming, setRenaming] = useState<Album | null>(null);
   const [renameName, setRenameName] = useState("");
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  const smart = albums.filter((a) => a.kind === "smart");
+  // Hide date-relative smart albums (Today/This Week/This Month) when empty.
+  const smart = albums.filter((a) => a.kind === "smart" && !isHiddenSmart(a));
   const manual = albums.filter((a) => a.kind === "manual");
 
   const submitCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    createAlbum.mutate(name, {
-      onSuccess: () => {
-        setNewName("");
-        setCreateOpen(false);
+    createAlbum.mutate(
+      { name, parentId: newParent === ROOT_VALUE ? null : newParent },
+      {
+        onSuccess: () => {
+          setNewName("");
+          setNewParent(ROOT_VALUE);
+          setCreateOpen(false);
+        },
       },
-    });
+    );
   };
 
   const submitRename = () => {
@@ -115,7 +158,7 @@ export function AlbumsPage() {
           {smart.length > 0 ? (
             <section>
               <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-                Smart Albums
+                {t("albumsPage.smartAlbums")}
               </h2>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                 {smart.map((album) => {
@@ -130,12 +173,12 @@ export function AlbumsPage() {
                         <div className="flex items-center justify-between">
                           <Icon className="h-6 w-6 text-primary" />
                           <Badge variant="secondary" className="text-xs">
-                            Smart
+                            {t("albumsPage.smartBadge")}
                           </Badge>
                         </div>
                         <div>
-                          <p className="truncate font-medium text-foreground">{album.name}</p>
-                          <p className="text-xs text-muted-foreground">{album.count} photos</p>
+                          <p className="truncate font-medium text-foreground">{albumLabel(album, t)}</p>
+                          <p className="text-xs text-muted-foreground">{t("albumsPage.photoCount", { count: album.count })}</p>
                         </div>
                       </CardContent>
                     </Card>
@@ -147,7 +190,7 @@ export function AlbumsPage() {
 
           <section>
             <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-              My Albums
+              {t("albumsPage.myAlbums")}
             </h2>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {manual.map((album) => {
@@ -156,7 +199,24 @@ export function AlbumsPage() {
                   <Card
                     key={album.id}
                     onClick={() => navigate(`/albums/${album.id}`)}
-                    className="group relative cursor-pointer border-0 bg-card transition-colors hover:bg-accent"
+                    onDragOver={(e) => {
+                      if (e.dataTransfer.types.includes("application/x-lumina-ids")) {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "copy";
+                        setDropTarget(album.id);
+                      }
+                    }}
+                    onDragLeave={() => setDropTarget((c) => (c === album.id ? null : c))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setDropTarget(null);
+                      const photoIds = parseDragIds(e);
+                      if (photoIds.length)
+                        addToAlbum.mutate({ albumId: album.id, photoIds });
+                    }}
+                    className={`group relative cursor-pointer border-0 bg-card transition-colors hover:bg-accent ${
+                      dropTarget === album.id ? "ring-2 ring-primary" : ""
+                    }`}
                   >
                     <CardContent className="flex flex-col gap-3 p-5">
                       <div className="flex items-center justify-between">
@@ -168,7 +228,7 @@ export function AlbumsPage() {
                               size="icon"
                               className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100"
                               onClick={(e) => e.stopPropagation()}
-                              aria-label="Album actions"
+                              aria-label={t("albumsPage.albumActions")}
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
@@ -180,23 +240,23 @@ export function AlbumsPage() {
                                 setRenameName(album.name);
                               }}
                             >
-                              Rename
+                              {t("common.rename")}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive"
                               onSelect={() => {
-                                if (confirm(`Delete album "${album.name}"?`))
+                                if (confirm(t("albumsPage.deleteConfirm", { name: album.name })))
                                   deleteAlbum.mutate(album.id);
                               }}
                             >
-                              Delete
+                              {t("common.delete")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
                       <div>
                         <p className="truncate font-medium text-foreground">{album.name}</p>
-                        <p className="text-xs text-muted-foreground">{album.count} photos</p>
+                        <p className="text-xs text-muted-foreground">{t("albumsPage.photoCount", { count: album.count })}</p>
                       </div>
                     </CardContent>
                   </Card>
@@ -210,7 +270,7 @@ export function AlbumsPage() {
                 className="flex min-h-[7rem] flex-col items-center justify-center gap-2 rounded-xl bg-muted/50 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
                 <Plus className="h-6 w-6" />
-                <span className="text-sm font-medium">New Album</span>
+                <span className="text-sm font-medium">{t("albumsPage.newAlbum")}</span>
               </button>
             </div>
           </section>
@@ -221,21 +281,37 @@ export function AlbumsPage() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>New album</DialogTitle>
+            <DialogTitle>{t("albumsPage.newAlbumTitle")}</DialogTitle>
           </DialogHeader>
           <Input
             autoFocus
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Album name"
+            placeholder={t("albumsPage.albumNamePlaceholder")}
             onKeyDown={(e) => e.key === "Enter" && submitCreate()}
           />
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">{t("albumsPage.parentLabel")}</label>
+            <Select value={newParent} onValueChange={setNewParent}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ROOT_VALUE}>{t("albumsPage.noParent")}</SelectItem>
+                {albumOptions(albums).map((o) => (
+                  <SelectItem key={o.id} value={o.id}>
+                    {" ".repeat(o.depth * 2) + o.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCreateOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitCreate} disabled={!newName.trim()}>
-              Create
+              {t("common.create")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -245,21 +321,21 @@ export function AlbumsPage() {
       <Dialog open={!!renaming} onOpenChange={(o) => !o && setRenaming(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename album</DialogTitle>
+            <DialogTitle>{t("albumsPage.renameAlbumTitle")}</DialogTitle>
           </DialogHeader>
           <Input
             autoFocus
             value={renameName}
             onChange={(e) => setRenameName(e.target.value)}
-            placeholder="Album name"
+            placeholder={t("albumsPage.albumNamePlaceholder")}
             onKeyDown={(e) => e.key === "Enter" && submitRename()}
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRenaming(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitRename} disabled={!renameName.trim()}>
-              Save
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

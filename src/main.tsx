@@ -4,12 +4,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 
 import App from "./App";
+import i18n, { normalizeLanguage } from "@/i18n";
 import { queryClient } from "@/lib/query";
 import { applyTheme, useUiStore } from "@/stores/uiStore";
 import "./index.css";
 
-// Apply the persisted theme before first paint to avoid a flash.
+// Apply the persisted theme and language before first paint to avoid a flash.
 applyTheme(useUiStore.getState().theme);
+void i18n.changeLanguage(normalizeLanguage(useUiStore.getState().language));
 
 const container = document.getElementById("root");
 if (!container) {

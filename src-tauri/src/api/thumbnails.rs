@@ -32,6 +32,39 @@ pub async fn thumbnail_path(state: State<'_, SharedState>, id: String) -> Result
     .await
 }
 
+/// Longest edge (px) of a full-size display preview. Large enough to fill the
+/// lightbox crisply, small enough to decode/cache quickly.
+const PREVIEW_MAX_EDGE: u32 = 2560;
+
+/// Resolve a webview-displayable source for a photo's full view.
+///
+/// Standard rasters are returned as-is (their original path). Camera RAW files —
+/// which the webview cannot decode — are rendered once from their embedded
+/// preview into a cached WebP and that path is returned instead. The original
+/// file is never modified.
+#[tauri::command]
+pub async fn display_preview(state: State<'_, SharedState>, id: String) -> Result<String> {
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        let photo = photos::get(&conn, &id)?;
+        // Only RAW needs re-rendering; everything else displays from its original.
+        if !photo.is_raw {
+            return Ok(photo.path);
+        }
+        let root = state.paths_snapshot().thumbnails;
+        let path = state.thumbnails.ensure_preview(
+            std::path::Path::new(&photo.path),
+            &root,
+            &id,
+            PREVIEW_MAX_EDGE,
+            photo.orientation,
+        )?;
+        Ok(path.to_string_lossy().to_string())
+    })
+    .await
+}
+
 /// Ensure a thumbnail exists for a photo, generating it if needed, and return
 /// its absolute path.
 #[tauri::command]

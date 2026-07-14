@@ -42,11 +42,30 @@ function useAlbumInvalidation() {
 export function useCreateAlbum() {
   const invalidate = useAlbumInvalidation();
   return useMutation({
-    mutationFn: (name: string) => api.createAlbum(name),
+    mutationFn: ({ name, parentId }: { name: string; parentId?: string | null }) =>
+      api.createAlbum(name, parentId ?? null),
     onSuccess: (album) => {
       invalidate();
       toast.success(`Album “${album.name}” created`);
     },
+  });
+}
+
+/** Move a manual album under a new parent (null = root) at a sibling index. */
+export function useMoveAlbum() {
+  const invalidate = useAlbumInvalidation();
+  return useMutation({
+    mutationFn: ({
+      id,
+      parentId,
+      newIndex,
+    }: {
+      id: string;
+      parentId: string | null;
+      newIndex: number;
+    }) => api.moveAlbum(id, parentId, newIndex),
+    onSuccess: invalidate,
+    onError: (e) => toast.error(String(e)),
   });
 }
 
@@ -84,6 +103,8 @@ export function useRemoveFromAlbum() {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: qk.albums });
       qc.invalidateQueries({ queryKey: ["albums", v.albumId] });
+      const n = v.photoIds.length;
+      toast.success(`Removed ${n} photo${n === 1 ? "" : "s"} from the album`);
     },
   });
 }

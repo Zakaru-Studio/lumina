@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
-use chrono::{Local, NaiveDateTime, TimeZone};
+use chrono::{Datelike, Local, NaiveDateTime, TimeZone};
 use exif::{In, Tag, Value};
 
 use crate::core::error::Result;
@@ -83,17 +83,53 @@ fn rational_field(exif: &exif::Exif, tag: Tag) -> Option<f64> {
     }
 }
 
+/// Extract the raw ASCII string of a field (not its "display" rendering, which
+/// can reformat dates and break parsing).
+fn ascii_value(field: &exif::Field) -> Option<String> {
+    match &field.value {
+        Value::Ascii(vals) => vals.first().map(|bytes| {
+            String::from_utf8_lossy(bytes)
+                .trim_end_matches('\0')
+                .trim()
+                .to_string()
+        }),
+        _ => Some(field.display_value().to_string()),
+    }
+}
+
+/// Parse an EXIF date-time string ("YYYY:MM:DD HH:MM:SS", occasionally with a
+/// dash date or a trailing sub-second/offset) into a Unix timestamp. The camera
+/// records local time with no zone, so it is interpreted in the machine's local
+/// zone — which round-trips to the same calendar day the timeline groups by.
+fn parse_exif_datetime(raw: &str) -> Option<i64> {
+    let s = raw.trim();
+    // Keep just the "date time" prefix; drop any sub-second / offset suffix.
+    let candidate = s.get(..19).unwrap_or(s);
+    for fmt in ["%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S"] {
+        if let Ok(naive) = NaiveDateTime::parse_from_str(candidate, fmt) {
+            // Reject the "unset" sentinel EXIF writes ("0000:00:00 00:00:00").
+            if naive.year() >= 1900 {
+                return Local
+                    .from_local_datetime(&naive)
+                    .single()
+                    .map(|dt| dt.timestamp());
+            }
+        }
+    }
+    None
+}
+
+/// Best capture instant: prefer the original taken time, then the digitized
+/// time, then the generic file DateTime — each read from its raw value.
 fn read_datetime(exif: &exif::Exif) -> Option<i64> {
-    let field = exif
-        .get_field(Tag::DateTimeOriginal, In::PRIMARY)
-        .or_else(|| exif.get_field(Tag::DateTime, In::PRIMARY))?;
-    let raw = field.display_value().to_string();
-    // EXIF format: "YYYY:MM:DD HH:MM:SS".
-    let parsed = NaiveDateTime::parse_from_str(raw.trim(), "%Y:%m:%d %H:%M:%S").ok()?;
-    Local
-        .from_local_datetime(&parsed)
-        .single()
-        .map(|dt| dt.timestamp())
+    for tag in [Tag::DateTimeOriginal, Tag::DateTimeDigitized, Tag::DateTime] {
+        if let Some(field) = exif.get_field(tag, In::PRIMARY) {
+            if let Some(ts) = ascii_value(field).and_then(|s| parse_exif_datetime(&s)) {
+                return Some(ts);
+            }
+        }
+    }
+    None
 }
 
 fn shutter(exif: &exif::Exif) -> Option<String> {

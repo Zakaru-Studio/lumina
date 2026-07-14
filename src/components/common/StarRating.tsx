@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Star } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ export function StarRating({
   readOnly = false,
   className,
 }: StarRatingProps) {
+  const { t } = useTranslation();
   const [hover, setHover] = useState<number | null>(null);
   const interactive = !readOnly && !!onChange;
   const shown = hover ?? value;
@@ -36,7 +38,7 @@ export function StarRating({
       className={cn("inline-flex items-center gap-0.5", className)}
       onMouseLeave={() => setHover(null)}
       role="radiogroup"
-      aria-label="Rating"
+      aria-label={t("rating.label")}
     >
       {[1, 2, 3, 4, 5].map((star) => {
         const filled = star <= shown;
@@ -45,7 +47,7 @@ export function StarRating({
             key={star}
             type="button"
             disabled={!interactive}
-            aria-label={`${star} star${star > 1 ? "s" : ""}`}
+            aria-label={t("rating.stars", { count: star })}
             className={cn(
               "rounded transition-colors",
               interactive ? "cursor-pointer hover:scale-110" : "cursor-default",

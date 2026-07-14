@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ImageIcon, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, FolderHeart, ImageIcon, Pencil, Trash2 } from "lucide-react";
 
 import { EmptyState } from "@/components/common/EmptyState";
 import { Lightbox } from "@/components/library/Lightbox";
@@ -25,13 +26,17 @@ import {
 } from "@/hooks/useAlbums";
 import { useGlobalShortcuts } from "@/hooks/useKeyboard";
 import { flattenPhotos } from "@/hooks/usePhotos";
+import { albumLabel } from "@/lib/albumLabel";
 import { buildQuery } from "@/lib/query";
+import { useAlbumContext } from "@/stores/albumContextStore";
+import type { Photo } from "@/types";
 
 /**
  * A single album's contents. Manual albums can be renamed or deleted inline;
  * smart albums are read-only rule-driven collections.
  */
 export function AlbumDetailPage() {
+  const { t } = useTranslation();
   const { albumId } = useParams();
   const id = albumId ?? null;
   const navigate = useNavigate();
@@ -51,14 +56,37 @@ export function AlbumDetailPage() {
   const deleteAlbum = useDeleteAlbum();
 
   const photos = useMemo(() => flattenPhotos(data?.pages), [data]);
-  const order = useMemo(() => photos.map((p) => p.id), [photos]);
+  const ids = useMemo(() => photos.map((p) => p.id), [photos]);
+  /** Album photos are fully loaded into `photos`, so index maps directly. */
+  const getPhoto = useCallback((i: number): Photo | undefined => photos[i], [photos]);
 
   const [index, setIndex] = useState<number | null>(null);
-  useGlobalShortcuts(order, { onOpen: setIndex, enabled: index === null });
+  useGlobalShortcuts(ids, { onOpen: setIndex, enabled: index === null });
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameName, setRenameName] = useState("");
 
   const isManual = album?.kind === "manual";
+  const childAlbums = useMemo(
+    () => albums.filter((a) => a.kind === "manual" && a.parentId === id),
+    [albums, id],
+  );
+  const parentAlbum = useMemo(
+    () => (album?.parentId ? albums.find((a) => a.id === album.parentId) ?? null : null),
+    [albums, album],
+  );
+
+  // Expose this album as the "remove from album" context — but only for manual
+  // albums (you can't remove photos from a rule-driven smart album).
+  const setAlbumCtx = useAlbumContext((s) => s.set);
+  const clearAlbumCtx = useAlbumContext((s) => s.clear);
+  useEffect(() => {
+    if (isManual && album) {
+      setAlbumCtx(album.id, album.name);
+      return () => clearAlbumCtx();
+    }
+    clearAlbumCtx();
+    return undefined;
+  }, [isManual, album, setAlbumCtx, clearAlbumCtx]);
 
   const submitRename = () => {
     if (!album) return;
@@ -69,7 +97,7 @@ export function AlbumDetailPage() {
 
   const onDelete = () => {
     if (!album) return;
-    if (confirm(`Delete album "${album.name}"?`))
+    if (confirm(t("albumDetailPage.deleteConfirm", { name: album.name })))
       deleteAlbum.mutate(album.id, { onSuccess: () => navigate("/albums") });
   };
 
@@ -80,7 +108,7 @@ export function AlbumDetailPage() {
         <Link
           to="/albums"
           className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          aria-label="Back to albums"
+          aria-label={t("albumDetailPage.backToAlbums")}
         >
           <ArrowLeft className="h-4 w-4" />
         </Link>
@@ -89,8 +117,21 @@ export function AlbumDetailPage() {
             <Skeleton className="h-6 w-40" />
           ) : (
             <>
-              <h1 className="truncate text-lg font-semibold text-foreground">{album.name}</h1>
-              <p className="text-xs text-muted-foreground">{album.count} photos</p>
+              <h1 className="truncate text-lg font-semibold text-foreground">{albumLabel(album, t)}</h1>
+              <p className="text-xs text-muted-foreground">
+                {parentAlbum ? (
+                  <>
+                    <Link
+                      to={`/albums/${parentAlbum.id}`}
+                      className="hover:text-foreground hover:underline"
+                    >
+                      {parentAlbum.name}
+                    </Link>
+                    {" · "}
+                  </>
+                ) : null}
+                {t("albumDetailPage.photoCount", { count: album.count })}
+              </p>
             </>
           )}
         </div>
@@ -99,7 +140,7 @@ export function AlbumDetailPage() {
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Rename album"
+              aria-label={t("albumDetailPage.renameAlbum")}
               onClick={() => {
                 setRenameName(album?.name ?? "");
                 setRenameOpen(true);
@@ -110,7 +151,7 @@ export function AlbumDetailPage() {
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Delete album"
+              aria-label={t("albumDetailPage.deleteAlbum")}
               className="text-destructive hover:text-destructive"
               onClick={onDelete}
             >
@@ -119,6 +160,26 @@ export function AlbumDetailPage() {
           </div>
         ) : null}
       </div>
+
+      {/* Sub-albums */}
+      {childAlbums.length > 0 ? (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 px-6 pb-3">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {t("albumDetailPage.subAlbums")}
+          </span>
+          {childAlbums.map((child) => (
+            <Link
+              key={child.id}
+              to={`/albums/${child.id}`}
+              className="flex items-center gap-1.5 rounded-full bg-muted/60 px-3 py-1 text-xs text-foreground transition-colors hover:bg-accent"
+            >
+              <FolderHeart className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="max-w-[160px] truncate">{child.name}</span>
+              <span className="text-muted-foreground">{child.count}</span>
+            </Link>
+          ))}
+        </div>
+      ) : null}
 
       {/* Body */}
       <div className="min-h-0 flex-1">
@@ -131,29 +192,33 @@ export function AlbumDetailPage() {
         ) : photos.length === 0 ? (
           <EmptyState
             icon={<ImageIcon className="h-6 w-6" />}
-            title="This album is empty"
+            title={t("albumDetailPage.empty.title")}
             description={
               isManual
-                ? "Drag photos onto this album in the sidebar, or use the selection toolbar to add some."
-                : "No photos match this smart album's rules yet."
+                ? t("albumDetailPage.empty.manualDescription")
+                : t("albumDetailPage.empty.smartDescription")
             }
           />
         ) : (
           <PhotoGrid
-            photos={photos}
+            ids={ids}
+            getPhoto={getPhoto}
             onOpen={setIndex}
-            hasNextPage={hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            fetchNextPage={fetchNextPage}
+            onVisibleRangeChange={(_, end) => {
+              if (end >= ids.length - 24 && hasNextPage && !isFetchingNextPage) {
+                fetchNextPage();
+              }
+            }}
           />
         )}
       </div>
 
       <Lightbox
-        photos={photos}
+        ids={ids}
         index={index}
         onClose={() => setIndex(null)}
         onIndexChange={setIndex}
+        getPhoto={getPhoto}
       />
       <SelectionToolbar albums={albums} />
 
@@ -161,21 +226,21 @@ export function AlbumDetailPage() {
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Rename album</DialogTitle>
+            <DialogTitle>{t("albumDetailPage.renameAlbumTitle")}</DialogTitle>
           </DialogHeader>
           <Input
             autoFocus
             value={renameName}
             onChange={(e) => setRenameName(e.target.value)}
-            placeholder="Album name"
+            placeholder={t("albumDetailPage.albumNamePlaceholder")}
             onKeyDown={(e) => e.key === "Enter" && submitRename()}
           />
           <DialogFooter>
             <Button variant="ghost" onClick={() => setRenameOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button onClick={submitRename} disabled={!renameName.trim()}>
-              Save
+              {t("common.save")}
             </Button>
           </DialogFooter>
         </DialogContent>

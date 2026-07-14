@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import {
@@ -6,6 +7,7 @@ import {
   FolderHeart,
   FolderInput,
   Images,
+  Map as MapIcon,
   Search,
   Settings,
 } from "lucide-react";
@@ -31,6 +33,7 @@ import { useUiStore } from "@/stores/uiStore";
  * and an instant, debounced photo search. Selecting any item closes the palette.
  */
 export function CommandPalette() {
+  const { t } = useTranslation();
   const open = useUiStore((s) => s.commandOpen);
   const setOpen = useUiStore((s) => s.setCommandOpen);
   const navigate = useNavigate();
@@ -68,28 +71,31 @@ export function CommandPalette() {
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder="Search photos or jump to…"
+        placeholder={t("command.placeholder")}
         value={text}
         onValueChange={setText}
       />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>{t("command.empty")}</CommandEmpty>
 
-        <CommandGroup heading="Go to">
+        <CommandGroup heading={t("command.goTo")}>
           <CommandItem onSelect={() => go("/")}>
-            <Images className="mr-2 h-4 w-4" /> Library
+            <Images className="mr-2 h-4 w-4" /> {t("nav.library")}
           </CommandItem>
           <CommandItem onSelect={() => go("/timeline")}>
-            <CalendarDays className="mr-2 h-4 w-4" /> Timeline
+            <CalendarDays className="mr-2 h-4 w-4" /> {t("nav.timeline")}
+          </CommandItem>
+          <CommandItem onSelect={() => go("/map")}>
+            <MapIcon className="mr-2 h-4 w-4" /> {t("nav.map")}
           </CommandItem>
           <CommandItem onSelect={() => go("/search")}>
-            <Search className="mr-2 h-4 w-4" /> Search
+            <Search className="mr-2 h-4 w-4" /> {t("nav.search")}
           </CommandItem>
           <CommandItem onSelect={() => go("/albums")}>
-            <FolderHeart className="mr-2 h-4 w-4" /> Albums
+            <FolderHeart className="mr-2 h-4 w-4" /> {t("nav.albums")}
           </CommandItem>
           <CommandItem onSelect={() => go("/settings")}>
-            <Settings className="mr-2 h-4 w-4" /> Settings
+            <Settings className="mr-2 h-4 w-4" /> {t("nav.settings")}
           </CommandItem>
           <CommandItem
             onSelect={() => {
@@ -97,14 +103,14 @@ export function CommandPalette() {
               importFolders.mutate();
             }}
           >
-            <FolderInput className="mr-2 h-4 w-4" /> Import folders…
+            <FolderInput className="mr-2 h-4 w-4" /> {t("command.importFolders")}
           </CommandItem>
         </CommandGroup>
 
         {photos.length > 0 ? (
           <>
             <CommandSeparator />
-            <CommandGroup heading="Photos">
+            <CommandGroup heading={t("command.photos")}>
               {photos.map((photo) => (
                 <CommandItem
                   key={photo.id}

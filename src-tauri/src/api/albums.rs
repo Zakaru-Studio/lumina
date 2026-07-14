@@ -26,17 +26,38 @@ pub async fn get_album(state: State<'_, SharedState>, id: String) -> Result<Albu
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;
-        albums::get(&conn, &id)
+        albums::get(&conn, &id, now())
     })
     .await
 }
 
 #[tauri::command]
-pub async fn create_album(state: State<'_, SharedState>, name: String) -> Result<Album> {
+pub async fn create_album(
+    state: State<'_, SharedState>,
+    name: String,
+    parent_id: Option<String>,
+) -> Result<Album> {
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;
-        albums::create(&conn, &name, now())
+        albums::create(&conn, &name, parent_id.as_deref(), now())
+    })
+    .await
+}
+
+/// Move a manual album under a new parent (`None` = root) and position it at
+/// `new_index` among its siblings. Handles reparenting and reordering together.
+#[tauri::command]
+pub async fn move_album(
+    state: State<'_, SharedState>,
+    id: String,
+    parent_id: Option<String>,
+    new_index: usize,
+) -> Result<()> {
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        albums::reparent(&conn, &id, parent_id.as_deref(), new_index)
     })
     .await
 }
@@ -101,7 +122,7 @@ pub async fn album_photos(
     let state = Arc::clone(&state);
     blocking(move || {
         let conn = state.db.get()?;
-        let album = albums::get(&conn, &album_id)?;
+        let album = albums::get(&conn, &album_id, now())?;
         let mut q = query;
         match album.kind {
             AlbumKind::Smart => {

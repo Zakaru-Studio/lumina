@@ -7,7 +7,7 @@ use rusqlite::{params, params_from_iter, Connection, Row};
 
 use crate::core::error::{Error, Result};
 use crate::core::models::{
-    ColorLabel, LibraryStats, MediaType, Photo, ThumbStatus, TimelineSection,
+    LibraryStats, MapPoint, MediaType, Photo, ThumbStatus, TimelineSection,
 };
 use crate::core::query::{Page, PhotoFilter, PhotoQuery, SortBy, SortDir};
 use crate::search;
@@ -17,7 +17,7 @@ const COLUMNS: &str = "id, path, filename, folder, format, media_type, \
     taken_at, file_created, file_modified, imported_at, \
     width, height, orientation, file_size, \
     camera_make, camera_model, lens, iso, focal_length, aperture, shutter_speed, \
-    gps_lat, gps_lon, hash, rating, color_label, is_favorite, is_raw, \
+    gps_lat, gps_lon, hash, rating, is_favorite, is_raw, \
     thumb_status, thumb_path";
 
 /// Map a fully-projected row (see [`COLUMNS`]) to a [`Photo`]. Tags are not
@@ -49,11 +49,10 @@ fn map_row(row: &Row<'_>) -> rusqlite::Result<Photo> {
         gps_lon: row.get(22)?,
         hash: row.get(23)?,
         rating: row.get::<_, i64>(24)?.clamp(0, 5) as u8,
-        color_label: ColorLabel::from_str_lenient(&row.get::<_, String>(25)?),
-        is_favorite: row.get::<_, i64>(26)? != 0,
-        is_raw: row.get::<_, i64>(27)? != 0,
-        thumb_status: ThumbStatus::from_str_lenient(&row.get::<_, String>(28)?),
-        thumb_path: row.get(29)?,
+        is_favorite: row.get::<_, i64>(25)? != 0,
+        is_raw: row.get::<_, i64>(26)? != 0,
+        thumb_status: ThumbStatus::from_str_lenient(&row.get::<_, String>(27)?),
+        thumb_path: row.get(28)?,
         tags: Vec::new(),
     })
 }
@@ -106,12 +105,13 @@ pub fn upsert(conn: &Connection, p: &Photo) -> Result<()> {
             taken_at, file_created, file_modified, imported_at, \
             width, height, orientation, file_size, \
             camera_make, camera_model, lens, iso, focal_length, aperture, shutter_speed, \
-            gps_lat, gps_lon, hash, rating, color_label, is_favorite, is_raw, \
+            gps_lat, gps_lon, hash, rating, is_favorite, is_raw, \
             thumb_status, thumb_path, deleted_at) \
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,NULL) \
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,NULL) \
          ON CONFLICT(path) DO UPDATE SET \
             filename=excluded.filename, folder=excluded.folder, format=excluded.format, \
-            media_type=excluded.media_type, taken_at=excluded.taken_at, \
+            media_type=excluded.media_type, \
+            taken_at=CASE WHEN photos.date_overridden = 1 THEN photos.taken_at ELSE excluded.taken_at END, \
             file_created=excluded.file_created, file_modified=excluded.file_modified, \
             width=excluded.width, height=excluded.height, orientation=excluded.orientation, \
             file_size=excluded.file_size, camera_make=excluded.camera_make, \
@@ -125,7 +125,7 @@ pub fn upsert(conn: &Connection, p: &Photo) -> Result<()> {
             p.taken_at, p.file_created, p.file_modified, p.imported_at,
             p.width as i64, p.height as i64, p.orientation as i64, p.file_size,
             p.camera_make, p.camera_model, p.lens, p.iso, p.focal_length, p.aperture, p.shutter_speed,
-            p.gps_lat, p.gps_lon, p.hash, p.rating as i64, p.color_label.as_str(),
+            p.gps_lat, p.gps_lon, p.hash, p.rating as i64,
             p.is_favorite as i64, p.is_raw as i64, p.thumb_status.as_str(), p.thumb_path,
         ],
     )?;
@@ -138,6 +138,26 @@ pub fn upsert(conn: &Connection, p: &Photo) -> Result<()> {
     // Rebuild the FTS row from the persisted state so user-set fields
     // (color label, tags) preserved across updates stay searchable.
     search::reindex(conn, &id)?;
+    Ok(())
+}
+
+/// Set a user-chosen capture date (`taken_at`, Unix seconds) for a photo and
+/// mark it as overridden so a later rescan preserves it instead of re-reading
+/// the file's (wrong) EXIF/filesystem date. Also refreshes the file size/mtime
+/// markers (an EXIF rewrite changes them). Rebuilds the FTS row.
+pub fn set_taken_at(
+    conn: &Connection,
+    id: &str,
+    taken_at: i64,
+    file_size: i64,
+    file_modified: Option<i64>,
+) -> Result<()> {
+    conn.execute(
+        "UPDATE photos SET taken_at = ?2, file_size = ?3, file_modified = ?4, \
+         date_overridden = 1 WHERE id = ?1",
+        params![id, taken_at, file_size, file_modified],
+    )?;
+    search::reindex(conn, id)?;
     Ok(())
 }
 
@@ -185,10 +205,6 @@ fn build_where(filter: &PhotoFilter) -> (String, Vec<Value>) {
     if let Some(min) = filter.min_rating {
         clauses.push("photos.rating >= ?".to_string());
         params.push(Value::Integer(min as i64));
-    }
-    if let Some(color) = &filter.color_label {
-        clauses.push("photos.color_label = ?".to_string());
-        params.push(Value::Text(color.clone()));
     }
     if let Some(fav) = filter.is_favorite {
         clauses.push("photos.is_favorite = ?".to_string());
@@ -258,6 +274,12 @@ fn order_clause(sort_by: SortBy, dir: SortDir) -> &'static str {
         (SortBy::Rating, _) => "ORDER BY photos.rating DESC, photos.id DESC",
         (SortBy::FileSize, "ASC") => "ORDER BY photos.file_size ASC, photos.id ASC",
         (SortBy::FileSize, _) => "ORDER BY photos.file_size DESC, photos.id DESC",
+        (SortBy::Timeline, "ASC") => {
+            "ORDER BY COALESCE(photos.taken_at, photos.imported_at) ASC, photos.id ASC"
+        }
+        (SortBy::Timeline, _) => {
+            "ORDER BY COALESCE(photos.taken_at, photos.imported_at) DESC, photos.id DESC"
+        }
     }
 }
 
@@ -304,6 +326,34 @@ pub fn list_ids(conn: &Connection, query: &PhotoQuery) -> Result<Vec<String>> {
     let sql = format!("SELECT id FROM photos {where_sql} {order}");
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map(params_from_iter(params.iter()), |r| r.get::<_, String>(0))?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
+/// List every live, geolocated photo as a lightweight [`MapPoint`] (newest
+/// first). Rows without both coordinates are excluded so the map only ever
+/// receives plottable points. Returns the full set — geotagged photos are a
+/// small subset of a library and the map clusters them client-side.
+pub fn with_gps(conn: &Connection) -> Result<Vec<MapPoint>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, gps_lat, gps_lon, filename, taken_at, thumb_path \
+         FROM photos \
+         WHERE deleted_at IS NULL AND gps_lat IS NOT NULL AND gps_lon IS NOT NULL \
+         ORDER BY COALESCE(taken_at, imported_at) DESC, id DESC",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(MapPoint {
+            id: r.get(0)?,
+            gps_lat: r.get(1)?,
+            gps_lon: r.get(2)?,
+            filename: r.get(3)?,
+            taken_at: r.get(4)?,
+            thumb_path: r.get(5)?,
+        })
+    })?;
     let mut out = Vec::new();
     for r in rows {
         out.push(r?);
@@ -368,20 +418,6 @@ pub fn set_rating(conn: &Connection, ids: &[String], rating: u8) -> Result<()> {
     Ok(())
 }
 
-/// Set the color label for a set of photos.
-pub fn set_color(conn: &Connection, ids: &[String], color: ColorLabel) -> Result<()> {
-    let tx = conn.unchecked_transaction()?;
-    for id in ids {
-        tx.execute(
-            "UPDATE photos SET color_label = ?2 WHERE id = ?1",
-            params![id, color.as_str()],
-        )?;
-        search::reindex_color(&tx, id, color)?;
-    }
-    tx.commit()?;
-    Ok(())
-}
-
 /// Toggle/set the favorite flag for a set of photos.
 pub fn set_favorite(conn: &Connection, ids: &[String], favorite: bool) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
@@ -406,6 +442,21 @@ pub fn soft_delete(conn: &Connection, ids: &[String], when: i64) -> Result<u64> 
             params![id, when],
         )? as u64;
         search::remove_photo(&tx, id)?;
+    }
+    tx.commit()?;
+    Ok(n)
+}
+
+/// Permanently delete photo rows and drop their FTS rows. Tag/album/AI links are
+/// removed automatically by `ON DELETE CASCADE` (foreign keys are enabled per
+/// connection). Used when the underlying files are deleted from disk — there is
+/// no undo. Returns the number of rows removed.
+pub fn hard_delete(conn: &Connection, ids: &[String]) -> Result<u64> {
+    let tx = conn.unchecked_transaction()?;
+    let mut n = 0u64;
+    for id in ids {
+        search::remove_photo(&tx, id)?;
+        n += tx.execute("DELETE FROM photos WHERE id = ?1", params![id])? as u64;
     }
     tx.commit()?;
     Ok(n)

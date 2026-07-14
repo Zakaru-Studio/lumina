@@ -12,6 +12,7 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Lumina",
         "width": 1280,
         "height": 832,
@@ -20,13 +21,29 @@
         "resizable": true,
         "fullscreen": false,
         "center": true,
-        "decorations": true,
+        "decorations": false,
+        "shadow": true,
         "theme": null,
-        "dragDropEnabled": true
+        "dragDropEnabled": false,
+        "visible": false
+      },
+      {
+        "label": "splashscreen",
+        "url": "splashscreen.html",
+        "title": "Lumina",
+        "width": 420,
+        "height": 300,
+        "resizable": false,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: blob:; media-src 'self' asset: http://asset.localhost blob:; style-src 'self' 'unsafe-inline'; script-src 'self'",
       "assetProtocol": {
         "enable": true,
         "scope": {
@@ -39,6 +56,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -50,5 +68,12 @@
     "shortDescription": "Fast local-first photo library manager.",
     "longDescription": "Lumina is a modern, local-first photo library manager: fast scanning, EXIF indexing, WebP thumbnails, virtualized browsing, timeline, smart albums and instant search."
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/Zakaru-Studio/lumina/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMyODE3RjU0MzkyNUUwNTQKUldSVTRDVTVWSCtCd2hwZUtjc1Y1ZWtkaEtMemIyT0swV3JqQUd0V1pHZHZDcG4yUEkwQ2lCZEwK"
+    }
+  }
 }

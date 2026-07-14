@@ -5,6 +5,7 @@ description = "Lumina — a fast, local-first modern photo library manager."
 authors = ["Lumina"]
 edition = "2021"
 rust-version = "1.77"
+license = "GPL-3.0-only"
 
 # The library that holds all backend logic. `main.rs` is a thin wrapper so the
 # same code can be exercised from integration tests and (later) other frontends.
@@ -27,6 +28,10 @@ tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 tauri-plugin-opener = "2"
+# In-app auto-update: check a signed GitHub Releases manifest, download and
+# install the new bundle, then relaunch (via the process plugin).
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
 
 # --- Async runtime & parallelism ---
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "fs", "time"] }
@@ -42,11 +47,20 @@ r2d2_sqlite = "0.25"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp", "gif", "bmp", "tiff"] }
 fast_image_resize = { version = "5", features = ["image"] }
 kamadak-exif = "0.5"
+# Pure-Rust EXIF *writing* (kamadak-exif is read-only). Used to bake a corrected
+# capture date back into JPEG/TIFF/PNG originals.
+little_exif = "0.6"
+# Pure-Rust camera RAW decoding (embedded preview extraction). Covers CR2/CR3,
+# NEF, ARW, DNG, ORF, RAF, RW2, PEF, SRW … with no system libraries. LGPL-2.1.
+rawler = "0.7"
 
 # --- Filesystem ---
 walkdir = "2.5"
 notify = "6.1"
 notify-debouncer-full = "0.3"
+# Send deleted originals to the OS trash / Recycle Bin instead of unlinking them
+# outright, so a "delete from disk" stays recoverable from the system trash.
+trash = "5"
 
 # --- Serialization & misc ---
 serde = { version = "1", features = ["derive"] }
@@ -65,6 +79,18 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # --- Caching ---
 lru = "0.12"
 parking_lot = "0.12"
+
+# Windows Shell thumbnail provider (IShellItemImageFactory) — lets us reuse the
+# OS-generated thumbnails Explorer shows for videos (and RAW/HEIC when a codec is
+# installed), with no bundled ffmpeg or external binaries.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_Common",
+    "Win32_Graphics_Gdi",
+] }
 
 [dev-dependencies]
 tempfile = "3.14"

@@ -7,8 +7,6 @@
 
 export type MediaType = "photo" | "video";
 
-export type ColorLabel = "none" | "red" | "yellow" | "green" | "blue" | "purple";
-
 export type ThumbStatus = "pending" | "ready" | "failed";
 
 export type AlbumKind = "manual" | "smart";
@@ -42,12 +40,25 @@ export interface Photo {
   gpsLon: number | null;
   hash: string | null;
   rating: number;
-  colorLabel: ColorLabel;
   isFavorite: boolean;
   isRaw: boolean;
   thumbStatus: ThumbStatus;
   thumbPath: string | null;
   tags: string[];
+}
+
+/**
+ * A lightweight geolocated photo for the map view. Mirrors the backend
+ * `MapPoint` — just enough to plot a marker and show its thumbnail, without the
+ * full {@link Photo} payload. Only photos carrying GPS coordinates appear here.
+ */
+export interface MapPoint {
+  id: string;
+  gpsLat: number;
+  gpsLon: number;
+  filename: string;
+  takenAt: number | null;
+  thumbPath: string | null;
 }
 
 export interface Tag {
@@ -66,6 +77,8 @@ export interface Album {
   icon: string | null;
   sortOrder: number;
   createdAt: number;
+  /** Parent album id for nesting; `null` for a root album (manual albums only). */
+  parentId: string | null;
   count: number;
 }
 
@@ -74,6 +87,18 @@ export interface WatchedFolder {
   path: string;
   addedAt: number;
   active: boolean;
+}
+
+/**
+ * A node in a proposed album hierarchy built from a folder tree (import preview).
+ * Each node is a candidate album: `mediaCount` is the media assigned directly to
+ * it and `children` are its sub-albums. Recursive.
+ */
+export interface FolderPreview {
+  name: string;
+  path: string;
+  mediaCount: number;
+  children: FolderPreview[];
 }
 
 export interface TimelineSection {
@@ -111,13 +136,12 @@ export interface AiStatus {
 
 // --- Query contract ---
 
-export type SortBy = "takenAt" | "importedAt" | "filename" | "rating" | "fileSize";
+export type SortBy = "takenAt" | "importedAt" | "filename" | "rating" | "fileSize" | "timeline";
 export type SortDir = "asc" | "desc";
 
 export interface PhotoFilter {
   text?: string | null;
   minRating?: number | null;
-  colorLabel?: string | null;
   isFavorite?: boolean | null;
   isRaw?: boolean | null;
   mediaType?: string | null;
@@ -154,6 +178,8 @@ export interface ScanProgress {
   discovered: number;
   indexed: number;
   thumbnailed: number;
+  /** Tasks fully processed (indexed *or* thumbnailed); reaches `total` on done. */
+  processed: number;
   total: number;
   current: string | null;
 }

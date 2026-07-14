@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   ChevronLeft,
   ChevronRight,
@@ -6,16 +7,19 @@ import {
   Maximize,
   Minus,
   Plus,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 
-import { ColorLabelPicker } from "@/components/common/ColorLabelPicker";
+import { DateTimeEditor } from "@/components/common/DateTimeEditor";
 import { StarRating } from "@/components/common/StarRating";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { originalSrc, thumbnailSrc } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+
+import { assetSrc, displayPreview, originalSrc, revealInExplorer, thumbnailSrc } from "@/lib/api";
 import {
   formatBytes,
   formatCamera,
@@ -26,19 +30,23 @@ import { cn } from "@/lib/utils";
 import { usePhoto } from "@/hooks/usePhotos";
 import { useAttachTag, useCreateTag, useDetachTag, useTags } from "@/hooks/useTags";
 import {
-  useSetColor,
+  useSetCaptureDate,
   useSetFavorite,
   useSetRating,
 } from "@/hooks/usePhotoMutations";
+import { useEditorStore } from "@/stores/editorStore";
 import type { Photo } from "@/types";
 
 /** Props for {@link Lightbox}. */
 export interface LightboxProps {
-  photos: Photo[];
-  /** Flat index into `photos`, or null when closed. */
+  /** The FULL ordered id list the viewer navigates over. */
+  ids: string[];
+  /** Index into `ids`, or null when closed. */
   index: number | null;
   onClose: () => void;
   onIndexChange: (i: number) => void;
+  /** Resolve a nearby photo's loaded detail (used for the filmstrip). */
+  getPhoto?: (index: number) => Photo | undefined;
 }
 
 /** A 2D translation offset (in CSS pixels, relative to the fit position). */
@@ -71,31 +79,74 @@ function clampOffset(offset: Point, scale: number, rect: DOMRect | null): Point 
 }
 
 /** A labelled metadata row. */
-function MetaRow({ label, value }: { label: string; value: string }) {
+function MetaRow({
+  label,
+  value,
+  onClick,
+  title,
+}: {
+  label: string;
+  value: string;
+  /** When set, the value renders as a button invoking this on click. */
+  onClick?: () => void;
+  title?: string;
+}) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className="text-xs uppercase tracking-wide text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground">{value}</span>
+      {onClick ? (
+        <button
+          type="button"
+          onClick={onClick}
+          title={title}
+          className="truncate text-left text-sm text-foreground underline-offset-2 hover:text-primary hover:underline"
+        >
+          {value}
+        </button>
+      ) : (
+        <span className="text-sm text-foreground" title={title}>
+          {value}
+        </span>
+      )}
     </div>
   );
 }
 
 /**
- * Full-screen viewer for a single photo. Shows the original at object-contain
- * with a right-hand metadata + editing panel (rating, color, favorite, tags).
- * Supports wheel/double-click zoom, drag-to-pan, and a filmstrip of neighbours.
+ * Full-screen viewer for a single photo, navigating over the whole id list.
+ * Shows the original at object-contain with a right-hand metadata + editing
+ * panel (rating, favorite, tags). Supports wheel/double-click zoom,
+ * drag-to-pan, and a filmstrip of neighbours resolved lazily via `getPhoto`.
  * All edits are catalog metadata; the original file is never modified.
  */
-export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProps) {
-  const open = index !== null && index >= 0 && index < photos.length;
-  const base = open ? photos[index] : null;
+export function Lightbox({ ids, index, onClose, onIndexChange, getPhoto }: LightboxProps) {
+  const { t } = useTranslation();
+  const open = index !== null && index >= 0 && index < ids.length;
+  const currentId = open ? ids[index] ?? null : null;
 
-  // Fresh detail (tags) for the current photo; fall back to the grid copy.
-  const detail = usePhoto(base ? base.id : null);
-  const photo: Photo | null = detail.data ?? base;
+  // Fresh detail (tags) for the current photo; fall back to any windowed copy so
+  // the image can appear immediately while the detail request resolves.
+  const detail = usePhoto(currentId);
+  const photo: Photo | undefined =
+    detail.data ?? (open && index !== null ? getPhoto?.(index) : undefined);
+
+  /** Videos render in a <video> player instead of the zoomable <img>. */
+  const isVideo = photo?.mediaType === "video";
+  /** RAW files aren't webview-decodable — display a rendered preview instead. */
+  const isRaw = photo?.isRaw === true && !isVideo;
+
+  // Resolve a displayable source for RAW originals (rendered + cached backend
+  // side). Only runs for RAW; standard images display straight from disk.
+  const rawPreview = useQuery({
+    queryKey: ["displayPreview", photo?.id],
+    queryFn: () => displayPreview(photo!.id),
+    enabled: open && isRaw && !!photo?.id,
+    staleTime: 5 * 60_000,
+  });
 
   const [imgLoaded, setImgLoaded] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [dateEditorOpen, setDateEditorOpen] = useState(false);
 
   // --- Zoom & pan state ---
   const [scale, setScale] = useState(1);
@@ -110,11 +161,15 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
   const panStart = useRef<Point | null>(null);
   const imageAreaRef = useRef<HTMLDivElement | null>(null);
   const activeThumbRef = useRef<HTMLButtonElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Read inside the native wheel handler to skip zoom math for videos.
+  const isVideoRef = useRef(false);
+  isVideoRef.current = isVideo;
 
   const { data: tags = [] } = useTags();
   const setRating = useSetRating();
-  const setColor = useSetColor();
   const setFavorite = useSetFavorite();
+  const setCaptureDate = useSetCaptureDate();
   const createTag = useCreateTag();
   const attachTag = useAttachTag();
   const detachTag = useDetachTag();
@@ -140,6 +195,15 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
     resetView(false);
   }, [photo?.id, resetView]);
 
+  // Auto-play the video as soon as it's shown (opening the viewer via a
+  // double-click is the user gesture). If the webview blocks autoplay-with-sound
+  // the native controls remain, so the user can start it manually.
+  useEffect(() => {
+    if (!open || !isVideo) return;
+    const v = videoRef.current;
+    if (v) void v.play().catch(() => {});
+  }, [open, isVideo, photo?.id]);
+
   // Native, non-passive wheel handler so we can preventDefault the page scroll
   // and zoom toward the cursor.
   useEffect(() => {
@@ -147,6 +211,7 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
     const el = imageAreaRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      if (isVideoRef.current) return; // videos are not zoomable
       e.preventDefault();
       const rect = el.getBoundingClientRect();
       const cx = e.clientX - (rect.left + rect.width / 2);
@@ -180,12 +245,18 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
         onIndexChange(Math.max(0, index - 1));
       } else if (e.key === "ArrowRight" && !typing) {
         e.preventDefault();
-        onIndexChange(Math.min(photos.length - 1, index + 1));
+        onIndexChange(Math.min(ids.length - 1, index + 1));
+      } else if (e.key === " " && !typing && videoRef.current) {
+        // Space toggles play/pause on the current video.
+        e.preventDefault();
+        const v = videoRef.current;
+        if (v.paused) void v.play().catch(() => {});
+        else v.pause();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, index, photos.length, onClose, onIndexChange]);
+  }, [open, index, ids.length, onClose, onIndexChange]);
 
   // Auto-scroll the active filmstrip thumb into view when the index changes.
   useEffect(() => {
@@ -193,9 +264,23 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
     activeThumbRef.current?.scrollIntoView({ inline: "center", block: "nearest" });
   }, [open, index]);
 
-  if (!open || index === null || !photo) return null;
+  // Only the truly-closed state unmounts the overlay. When the current photo's
+  // detail is momentarily unavailable (its windowed page hasn't loaded yet), we
+  // keep the chrome mounted and show a loading placeholder in the image area.
+  if (!open || index === null) return null;
 
-  const ids = [photo.id];
+  /** Ids the metadata mutations act on: just the currently viewed photo. */
+  const targetIds = photo ? [photo.id] : [];
+
+  /** Source shown in the <img>: a rendered preview for RAW (null while it
+   * resolves), the original file otherwise. */
+  const imgSrc = !photo
+    ? null
+    : isRaw
+      ? rawPreview.data
+        ? assetSrc(rawPreview.data)
+        : null
+      : originalSrc(photo);
 
   /** Toggle between fit and 2× at the double-clicked point. */
   const onImageDoubleClick = (e: React.MouseEvent<HTMLImageElement>) => {
@@ -259,44 +344,58 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
     if (!name) return;
     const existing = tags.find((t) => t.name.toLowerCase() === name.toLowerCase());
     if (existing) {
-      attachTag.mutate({ tagId: existing.id, photoIds: ids });
+      attachTag.mutate({ tagId: existing.id, photoIds: targetIds });
       setTagInput("");
       return;
     }
     createTag.mutate(
       { name },
       {
-        onSuccess: (tag) => attachTag.mutate({ tagId: tag.id, photoIds: ids }),
+        onSuccess: (tag) => attachTag.mutate({ tagId: tag.id, photoIds: targetIds }),
       },
     );
     setTagInput("");
   };
 
   const filmStart = Math.max(0, index - FILMSTRIP_WINDOW);
-  const filmEnd = Math.min(photos.length - 1, index + FILMSTRIP_WINDOW);
+  const filmEnd = Math.min(ids.length - 1, index + FILMSTRIP_WINDOW);
+  const filmIndices: number[] = [];
+  for (let i = filmStart; i <= filmEnd; i++) filmIndices.push(i);
 
   return (
     <div className="fixed inset-0 z-50 flex bg-background/95 backdrop-blur animate-fade-in">
-      {/* Close */}
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onClose}
-        aria-label="Close"
-        className="absolute right-4 top-4 z-10"
-      >
-        <X className="h-5 w-5" />
-      </Button>
+      {/* Top-right toolbar: edit + close */}
+      <div className="absolute right-4 top-4 z-10 flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("common.edit")}
+          disabled={!photo}
+          onClick={() => photo && useEditorStore.getState().open(photo.id)}
+        >
+          <SlidersHorizontal className="h-5 w-5" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label={t("common.close")}>
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
 
       {/* Image area */}
       <div
         ref={imageAreaRef}
-        className="relative flex flex-1 items-center justify-center overflow-hidden p-8"
+        className={cn(
+          "relative flex flex-1 items-center justify-center overflow-hidden p-8",
+          // Videos expose a native control bar at their bottom edge. When a
+          // filmstrip is present it sits above that edge and would cover the
+          // controls for tall (portrait) videos, so reserve room to lift the
+          // video clear of the strip.
+          isVideo && ids.length > 1 && "pb-28",
+        )}
       >
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Previous"
+          aria-label={t("lightbox.previous")}
           disabled={index === 0}
           onClick={() => onIndexChange(Math.max(0, index - 1))}
           className="absolute left-4 top-1/2 z-10 -translate-y-1/2"
@@ -304,54 +403,76 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
           <ChevronLeft className="h-6 w-6" />
         </Button>
 
-        {!imgLoaded ? <Skeleton className="absolute h-2/3 w-2/3 rounded-xl" /> : null}
-        <img
-          key={photo.id}
-          src={originalSrc(photo)}
-          alt={photo.filename}
-          onLoad={() => setImgLoaded(true)}
-          onDoubleClick={onImageDoubleClick}
-          onPointerDown={onImagePointerDown}
-          onPointerMove={onImagePointerMove}
-          onPointerUp={endPan}
-          onPointerCancel={endPan}
-          draggable={false}
-          style={{
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
-            transformOrigin: "center",
-            transition: smooth
-              ? "transform 200ms ease, opacity 200ms ease"
-              : "opacity 200ms ease",
-            cursor: canPan ? (panning ? "grabbing" : "grab") : "default",
-            touchAction: "none",
-          }}
-          className={cn(
-            "max-h-full max-w-full select-none object-contain",
-            imgLoaded ? "opacity-100" : "opacity-0",
-          )}
-        />
+        {!photo || !imgLoaded ? (
+          <Skeleton className="absolute h-2/3 w-2/3 rounded-xl" />
+        ) : null}
+        {!photo ? null : isVideo ? (
+          <video
+            key={photo.id}
+            ref={videoRef}
+            src={originalSrc(photo)}
+            controls
+            autoPlay
+            playsInline
+            onLoadedData={() => setImgLoaded(true)}
+            className={cn(
+              "max-h-full max-w-full object-contain outline-none transition-opacity duration-200",
+              imgLoaded ? "opacity-100" : "opacity-0",
+            )}
+          />
+        ) : (
+          <img
+            key={photo.id}
+            src={imgSrc ?? undefined}
+            alt={photo.filename}
+            onLoad={() => setImgLoaded(true)}
+            onDoubleClick={onImageDoubleClick}
+            onPointerDown={onImagePointerDown}
+            onPointerMove={onImagePointerMove}
+            onPointerUp={endPan}
+            onPointerCancel={endPan}
+            draggable={false}
+            style={{
+              transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+              transformOrigin: "center",
+              transition: smooth
+                ? "transform 200ms ease, opacity 200ms ease"
+                : "opacity 200ms ease",
+              cursor: canPan ? (panning ? "grabbing" : "grab") : "default",
+              touchAction: "none",
+            }}
+            className={cn(
+              "max-h-full max-w-full select-none object-contain",
+              imgLoaded ? "opacity-100" : "opacity-0",
+            )}
+          />
+        )}
 
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Next"
-          disabled={index === photos.length - 1}
-          onClick={() => onIndexChange(Math.min(photos.length - 1, index + 1))}
+          aria-label={t("lightbox.next")}
+          disabled={index === ids.length - 1}
+          onClick={() => onIndexChange(Math.min(ids.length - 1, index + 1))}
           className="absolute right-4 top-1/2 z-10 -translate-y-1/2"
         >
           <ChevronRight className="h-6 w-6" />
         </Button>
 
-        {/* Zoom controls (bottom-left). Marked so they never trigger image pan. */}
+        {/* Zoom controls (bottom-left). Marked so they never trigger image pan.
+            Hidden for videos, which use their own native player controls. */}
         <div
-          className="absolute bottom-4 left-4 z-10 flex items-center gap-1 rounded-xl bg-background/60 px-1 py-1 backdrop-blur"
+          className={cn(
+            "absolute bottom-4 left-4 z-10 flex items-center gap-1 rounded-xl bg-background/60 px-1 py-1 backdrop-blur",
+            isVideo && "hidden",
+          )}
           onPointerDown={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
         >
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Zoom out"
+            aria-label={t("lightbox.zoomOut")}
             disabled={scale <= MIN_SCALE + 0.001}
             onClick={() => zoomBy(1 / 1.5)}
           >
@@ -363,7 +484,7 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Zoom in"
+            aria-label={t("lightbox.zoomIn")}
             disabled={scale >= MAX_SCALE - 0.001}
             onClick={() => zoomBy(1.5)}
           >
@@ -372,7 +493,7 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Fit to screen"
+            aria-label={t("lightbox.fitToScreen")}
             disabled={scale === 1 && offset.x === 0 && offset.y === 0}
             onClick={() => resetView(true)}
           >
@@ -381,26 +502,26 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
         </div>
 
         {/* Filmstrip (bottom-center), only when there is more than one photo. */}
-        {photos.length > 1 ? (
+        {ids.length > 1 ? (
           <div
             className="pointer-events-none absolute inset-x-0 bottom-4 z-0 flex justify-center px-20"
-            aria-label="Filmstrip"
+            aria-label={t("lightbox.filmstrip")}
           >
             <div
               className="pointer-events-auto flex max-w-full gap-1.5 overflow-x-auto rounded-xl bg-background/60 p-1.5 backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               onPointerDown={(e) => e.stopPropagation()}
               onDoubleClick={(e) => e.stopPropagation()}
             >
-              {photos.slice(filmStart, filmEnd + 1).map((p, i) => {
-                const realIndex = filmStart + i;
+              {filmIndices.map((realIndex) => {
                 const active = realIndex === index;
-                const thumb = thumbnailSrc(p);
+                const p = getPhoto?.(realIndex);
+                const thumb = p ? thumbnailSrc(p) : null;
                 return (
                   <button
-                    key={p.id}
+                    key={ids[realIndex] ?? realIndex}
                     ref={active ? activeThumbRef : undefined}
                     type="button"
-                    aria-label={p.filename}
+                    aria-label={p?.filename ?? t("lightbox.photo")}
                     aria-current={active ? "true" : undefined}
                     onClick={() => onIndexChange(realIndex)}
                     className={cn(
@@ -413,7 +534,7 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
                     {thumb ? (
                       <img
                         src={thumb}
-                        alt={p.filename}
+                        alt={p?.filename ?? ""}
                         loading="lazy"
                         decoding="async"
                         draggable={false}
@@ -432,6 +553,13 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
 
       {/* Metadata panel */}
       <aside className="flex w-80 shrink-0 flex-col gap-5 overflow-y-auto bg-card/60 p-6">
+        {!photo ? (
+          <div className="flex flex-col gap-3">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        ) : (
+          <>
         <div className="flex flex-col gap-1">
           <h2 className="truncate text-base font-medium text-foreground" title={photo.filename}>
             {photo.filename}
@@ -442,29 +570,22 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
         {/* Editable controls */}
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">Rating</span>
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">{t("lightbox.rating")}</span>
             <StarRating
               value={photo.rating}
-              onChange={(rating) => setRating.mutate({ ids, rating })}
+              onChange={(rating) => setRating.mutate({ ids: targetIds, rating })}
               size={18}
             />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">Color</span>
-            <ColorLabelPicker
-              value={photo.colorLabel}
-              onChange={(color) => setColor.mutate({ ids, color })}
-            />
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs uppercase tracking-wide text-muted-foreground">Favorite</span>
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">{t("lightbox.favorite")}</span>
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Toggle favorite"
+              aria-label={t("lightbox.toggleFavorite")}
               className={cn(photo.isFavorite && "text-red-500")}
               onClick={() =>
-                setFavorite.mutate({ ids, favorite: !photo.isFavorite })
+                setFavorite.mutate({ ids: targetIds, favorite: !photo.isFavorite })
               }
             >
               <Heart className={cn("h-4 w-4", photo.isFavorite && "fill-current")} />
@@ -474,7 +595,7 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
 
         {/* Tags */}
         <div className="flex flex-col gap-2">
-          <span className="text-xs uppercase tracking-wide text-muted-foreground">Tags</span>
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">{t("lightbox.tags")}</span>
           <div className="flex flex-wrap gap-1.5">
             {photo.tags.map((name) => {
               const tag = tags.find((t) => t.name === name);
@@ -484,7 +605,7 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
                   variant="secondary"
                   className="cursor-pointer gap-1"
                   onClick={() =>
-                    tag && detachTag.mutate({ tagId: tag.id, photoIds: ids })
+                    tag && detachTag.mutate({ tagId: tag.id, photoIds: targetIds })
                   }
                 >
                   {name}
@@ -493,12 +614,12 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
               );
             })}
             {photo.tags.length === 0 ? (
-              <span className="text-xs text-muted-foreground">No tags</span>
+              <span className="text-xs text-muted-foreground">{t("lightbox.noTags")}</span>
             ) : null}
           </div>
           <Input
             list="lumina-tag-suggestions"
-            placeholder="Add a tag…"
+            placeholder={t("lightbox.addTagPlaceholder")}
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={(e) => {
@@ -517,12 +638,35 @@ export function Lightbox({ photos, index, onClose, onIndexChange }: LightboxProp
 
         {/* Read-only metadata */}
         <div className="flex flex-col gap-3">
-          {formatExposure(photo) ? <MetaRow label="Exposure" value={formatExposure(photo)} /> : null}
-          <MetaRow label="Taken" value={formatTaken(photo)} />
-          <MetaRow label="Dimensions" value={`${photo.width} × ${photo.height}`} />
-          <MetaRow label="Size" value={formatBytes(photo.fileSize)} />
-          <MetaRow label="Folder" value={photo.folder} />
+          {formatExposure(photo) ? <MetaRow label={t("lightbox.exposure")} value={formatExposure(photo)} /> : null}
+          <MetaRow
+            label={t("lightbox.taken")}
+            value={formatTaken(photo)}
+            onClick={() => setDateEditorOpen(true)}
+            title={t("lightbox.editDate")}
+          />
+          <MetaRow label={t("lightbox.dimensions")} value={`${photo.width} × ${photo.height}`} />
+          <MetaRow label={t("lightbox.size")} value={formatBytes(photo.fileSize)} />
+          <MetaRow
+            label={t("lightbox.folder")}
+            value={photo.folder}
+            title={photo.path}
+            onClick={() => revealInExplorer(photo.path)}
+          />
         </div>
+
+        <DateTimeEditor
+          open={dateEditorOpen}
+          onOpenChange={setDateEditorOpen}
+          initial={photo.takenAt ?? photo.fileCreated ?? photo.importedAt}
+          onSubmit={(timestamp) => {
+            setCaptureDate.mutate({ ids: [photo.id], timestamp });
+            setDateEditorOpen(false);
+          }}
+          pending={setCaptureDate.isPending}
+        />
+          </>
+        )}
       </aside>
     </div>
   );

@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   FolderOpen,
   Plus,
@@ -30,7 +33,9 @@ import { useAiStatus, useConfig, useUpdateConfig } from "@/hooks/useSettings";
 import { useLibraryStats } from "@/hooks/usePhotos";
 import { useScanControls, useWatchedFolders } from "@/hooks/useScan";
 import * as api from "@/lib/api";
-import { useUiStore } from "@/stores/uiStore";
+import { normalizeLanguage } from "@/i18n";
+import { useUiStore, type DeletePreference } from "@/stores/uiStore";
+import { useUpdaterStore } from "@/stores/updaterStore";
 import type { AppConfig, Theme } from "@/types";
 
 /** A titled settings section rendered as a borderless card. */
@@ -88,11 +93,20 @@ export function SettingsPage() {
   const { data: folders = [] } = useWatchedFolders();
   const { data: ai } = useAiStatus();
   const { data: stats } = useLibraryStats();
-  const { importFolders, removeFolder, rescan } = useScanControls();
+  const { importFolders, removeFolder } = useScanControls();
+  const { t } = useTranslation();
   const setTheme = useUiStore((s) => s.setTheme);
+  const language = useUiStore((s) => s.language);
+  const setLanguage = useUiStore((s) => s.setLanguage);
+  const deletePreference = useUiStore((s) => s.deletePreference);
+  const setDeletePreference = useUiStore((s) => s.setDeletePreference);
 
   const [thumbSize, setThumbSize] = useState(256);
   const [workers, setWorkers] = useState(0);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  const updaterStatus = useUpdaterStore((s) => s.status);
+  const checkForUpdates = useUpdaterStore((s) => s.check);
 
   useEffect(() => {
     if (config) {
@@ -101,10 +115,31 @@ export function SettingsPage() {
     }
   }, [config]);
 
+  // Resolve the running app version (from tauri.conf.json) once.
+  useEffect(() => {
+    void getVersion().then(setAppVersion).catch(() => setAppVersion(null));
+  }, []);
+
+  /** Manual update check: the store opens the dialog if one is found; here we
+   * only surface the "already up to date" / failure outcomes as toasts. */
+  const runUpdateCheck = async () => {
+    await checkForUpdates({ manual: true });
+    const { status, error } = useUpdaterStore.getState();
+    if (status === "upToDate") toast.success(t("updater.upToDate"));
+    else if (status === "error") toast.error(error ?? t("updater.checkFailed"));
+  };
+
   /** Persist a partial change on top of the current config. */
   const save = (partial: Partial<AppConfig>) => {
     if (!config) return;
     updateConfig.mutate({ ...config, ...partial });
+  };
+
+  /** Regenerate all thumbnails at the current configured size (progress shown
+   * by the scan bar). */
+  const regenerateThumbs = () => {
+    void api.regenerateThumbnails();
+    toast(t("settings.thumbnails.regenerating"));
   };
 
   if (isLoading || !config) {
@@ -123,8 +158,8 @@ export function SettingsPage() {
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-2xl space-y-6 p-8">
         {/* Appearance */}
-        <Section title="Appearance" description="Theme and language.">
-          <Row label="Theme">
+        <Section title={t("settings.appearance.title")} description={t("settings.appearance.description")}>
+          <Row label={t("settings.appearance.theme")}>
             <Select
               value={config.theme}
               onValueChange={(v) => {
@@ -136,14 +171,20 @@ export function SettingsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="light">Light</SelectItem>
-                <SelectItem value="dark">Dark</SelectItem>
-                <SelectItem value="system">System</SelectItem>
+                <SelectItem value="light">{t("settings.appearance.themeLight")}</SelectItem>
+                <SelectItem value="dark">{t("settings.appearance.themeDark")}</SelectItem>
+                <SelectItem value="system">{t("settings.appearance.themeSystem")}</SelectItem>
               </SelectContent>
             </Select>
           </Row>
-          <Row label="Language">
-            <Select value={config.language} onValueChange={(v) => save({ language: v })}>
+          <Row label={t("settings.appearance.language")}>
+            <Select
+              value={language}
+              onValueChange={(v) => {
+                setLanguage(normalizeLanguage(v));
+                save({ language: v });
+              }}
+            >
               <SelectTrigger className="w-40">
                 <SelectValue />
               </SelectTrigger>
@@ -155,9 +196,31 @@ export function SettingsPage() {
           </Row>
         </Section>
 
+        {/* Deletion */}
+        <Section
+          title={t("settings.deletion.title")}
+          description={t("settings.deletion.description")}
+        >
+          <Row label={t("settings.deletion.behavior")}>
+            <Select
+              value={deletePreference}
+              onValueChange={(v) => setDeletePreference(v as DeletePreference)}
+            >
+              <SelectTrigger className="w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ask">{t("settings.deletion.ask")}</SelectItem>
+                <SelectItem value="library">{t("settings.deletion.library")}</SelectItem>
+                <SelectItem value="disk">{t("settings.deletion.disk")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </Row>
+        </Section>
+
         {/* Thumbnails */}
-        <Section title="Thumbnails" description="How previews are generated and cached.">
-          <Row label="Thumbnail size" hint={`${thumbSize} px`}>
+        <Section title={t("settings.thumbnails.title")} description={t("settings.thumbnails.description")}>
+          <Row label={t("settings.thumbnails.size")} hint={t("settings.thumbnails.sizeHint", { size: thumbSize })}>
             <Slider
               className="w-48"
               min={128}
@@ -165,11 +228,15 @@ export function SettingsPage() {
               step={16}
               value={[thumbSize]}
               onValueChange={(v) => setThumbSize(v[0])}
-              onValueCommit={(v) => save({ thumbnailSize: v[0] })}
+              onValueCommit={(v) => {
+                if (v[0] === config.thumbnailSize) return;
+                save({ thumbnailSize: v[0] });
+                regenerateThumbs();
+              }}
             />
           </Row>
           <Separator />
-          <Row label="Cache location" hint={config.cacheDir ?? "Default location"}>
+          <Row label={t("settings.thumbnails.cacheLocation")} hint={config.cacheDir ?? t("settings.thumbnails.cacheDefault")}>
             <Button
               variant="secondary"
               size="sm"
@@ -180,26 +247,29 @@ export function SettingsPage() {
               }}
             >
               <FolderOpen className="h-4 w-4" />
-              Change…
+              {t("common.change")}
             </Button>
           </Row>
           <Separator />
-          <Row label="Rebuild library" hint="Re-index and regenerate all thumbnails.">
+          <Row label={t("settings.thumbnails.rebuild")} hint={t("settings.thumbnails.rebuildHint")}>
             <Button
               variant="secondary"
               size="sm"
               className="gap-1.5"
-              onClick={() => rescan.mutate()}
+              onClick={regenerateThumbs}
             >
               <RefreshCw className="h-4 w-4" />
-              Rebuild
+              {t("settings.thumbnails.rebuildAction")}
             </Button>
           </Row>
         </Section>
 
         {/* Performance */}
-        <Section title="Performance" description="Background processing.">
-          <Row label="Worker threads" hint={workers === 0 ? "Auto" : `${workers} threads`}>
+        <Section title={t("settings.performance.title")} description={t("settings.performance.description")}>
+          <Row
+            label={t("settings.performance.workers")}
+            hint={workers === 0 ? t("settings.performance.workersAuto") : t("settings.performance.workersCount", { n: workers })}
+          >
             <Slider
               className="w-48"
               min={0}
@@ -213,10 +283,10 @@ export function SettingsPage() {
         </Section>
 
         {/* Watched folders */}
-        <Section title="Watched Folders" description="Folders Lumina indexes and monitors.">
+        <Section title={t("settings.folders.title")} description={t("settings.folders.description")}>
           <div className="space-y-2">
             {folders.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No folders yet.</p>
+              <p className="text-sm text-muted-foreground">{t("settings.folders.empty")}</p>
             ) : (
               folders.map((folder) => (
                 <div
@@ -231,7 +301,7 @@ export function SettingsPage() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                    aria-label="Remove folder"
+                    aria-label={t("settings.folders.removeAria")}
                     onClick={() => removeFolder.mutate(folder.id)}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -247,19 +317,19 @@ export function SettingsPage() {
             onClick={() => importFolders.mutate()}
           >
             <Plus className="h-4 w-4" />
-            Add folder…
+            {t("settings.folders.add")}
           </Button>
         </Section>
 
         {/* Library stats */}
-        <Section title="Library" description="At a glance.">
+        <Section title={t("settings.library.title")} description={t("settings.library.description")}>
           <div className="grid grid-cols-3 gap-3">
-            <Stat label="Photos" value={stats?.total ?? 0} />
-            <Stat label="Favorites" value={stats?.favorites ?? 0} />
-            <Stat label="RAW" value={stats?.raw ?? 0} />
-            <Stat label="Videos" value={stats?.videos ?? 0} />
-            <Stat label="Pending thumbs" value={stats?.pendingThumbs ?? 0} />
-            <Stat label="Tags" value={stats?.tags ?? 0} />
+            <Stat label={t("settings.library.photos")} value={stats?.total ?? 0} />
+            <Stat label={t("settings.library.favorites")} value={stats?.favorites ?? 0} />
+            <Stat label={t("settings.library.raw")} value={stats?.raw ?? 0} />
+            <Stat label={t("settings.library.videos")} value={stats?.videos ?? 0} />
+            <Stat label={t("settings.library.pendingThumbs")} value={stats?.pendingThumbs ?? 0} />
+            <Stat label={t("settings.library.tags")} value={stats?.tags ?? 0} />
           </div>
         </Section>
 
@@ -268,15 +338,15 @@ export function SettingsPage() {
           <CardHeader>
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
-              <CardTitle className="text-base">Intelligence</CardTitle>
+              <CardTitle className="text-base">{t("settings.ai.title")}</CardTitle>
               {aiDisabled ? (
                 <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
-                  Coming soon
+                  {t("settings.ai.comingSoon")}
                 </span>
               ) : null}
             </div>
             <CardDescription>
-              On-device AI features, planned for a future release.
+              {t("settings.ai.description")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -285,26 +355,47 @@ export function SettingsPage() {
               aria-disabled={aiDisabled}
             >
               <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-sm font-medium text-foreground">Face recognition</p>
+                <p className="text-sm font-medium text-foreground">{t("settings.ai.faceTitle")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Group photos by the people in them, computed locally.
+                  {t("settings.ai.faceDescription")}
                 </p>
               </div>
               <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-sm font-medium text-foreground">Natural-language search</p>
+                <p className="text-sm font-medium text-foreground">{t("settings.ai.nlSearchTitle")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Find photos by description using CLIP embeddings.
+                  {t("settings.ai.nlSearchDescription")}
                 </p>
               </div>
               <div className="rounded-lg bg-muted/50 p-3">
-                <p className="text-sm font-medium text-foreground">Text in images (OCR)</p>
+                <p className="text-sm font-medium text-foreground">{t("settings.ai.ocrTitle")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Search for words that appear inside your photos.
+                  {t("settings.ai.ocrDescription")}
                 </p>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* About / updates */}
+        <Section title={t("settings.about.title")} description={t("settings.about.description")}>
+          <Row label={t("settings.about.version")}>
+            <span className="text-sm tabular-nums text-muted-foreground">
+              {appVersion ?? "—"}
+            </span>
+          </Row>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="gap-1.5"
+            disabled={updaterStatus === "checking" || updaterStatus === "downloading"}
+            onClick={() => void runUpdateCheck()}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${updaterStatus === "checking" ? "animate-spin" : ""}`}
+            />
+            {t("updater.checkForUpdates")}
+          </Button>
+        </Section>
       </div>
     </div>
   );

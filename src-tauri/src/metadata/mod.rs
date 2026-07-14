@@ -1,6 +1,7 @@
 //! Metadata module: EXIF extraction and format classification.
 
 pub mod exif;
+pub mod exif_write;
 
 pub use exif::{read as read_exif, ExifData};
 

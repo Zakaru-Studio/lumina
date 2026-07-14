@@ -5,34 +5,21 @@
  *      Ctrl/Cmd+K  toggle command palette · Escape close palette / clear selection
  *
  *  useGlobalShortcuts(order, opts) — mounted once per visible grid page:
- *      Ctrl/Cmd+A  select all         Delete/Backspace  remove from catalog
- *      0–5         set star rating     6–9               color label
- *      F / Shift+F favorite / unfav    ←/→               move selection cursor
- *      Enter/Space open in lightbox
+ *      Ctrl/Cmd+A  select all         Delete/Backspace  delete (opens dialog)
+ *      0–5         set star rating     ←/→               move selection cursor
+ *      F / Shift+F favorite / unfav    Enter/Space       open in lightbox
  *
- * Rating/color/favorite apply to the current selection, or the cursor (anchor)
- * when nothing is selected. All are non-destructive; Delete only removes from
- * the catalog (files are never touched).
+ * Rating/favorite apply to the current selection, or the cursor (anchor)
+ * when nothing is selected and are non-destructive. Delete opens the shared
+ * confirmation to choose between removing from the library and deleting the
+ * files from disk — nothing is deleted without that choice.
  */
 import { useEffect } from "react";
 
-import {
-  useRemovePhotos,
-  useSetColor,
-  useSetFavorite,
-  useSetRating,
-} from "@/hooks/usePhotoMutations";
+import { useSetFavorite, useSetRating } from "@/hooks/usePhotoMutations";
+import { useDeleteDialog } from "@/stores/deleteDialogStore";
 import { useSelectionStore } from "@/stores/selectionStore";
 import { useUiStore } from "@/stores/uiStore";
-import type { ColorLabel } from "@/types";
-
-/** Digit → color label mapping for quick labelling. */
-const COLOR_KEYS: Record<string, ColorLabel> = {
-  "6": "red",
-  "7": "yellow",
-  "8": "green",
-  "9": "blue",
-};
 
 /** True when focus is in a text-entry surface (so we don't hijack typing). */
 function isTyping(): boolean {
@@ -77,11 +64,8 @@ export function useGlobalShortcuts(order: string[], opts: GridShortcutOptions = 
   const selectAll = useSelectionStore((s) => s.selectAll);
   const select = useSelectionStore((s) => s.select);
   const selectRange = useSelectionStore((s) => s.selectRange);
-  const clear = useSelectionStore((s) => s.clear);
   const setRating = useSetRating();
-  const setColor = useSetColor();
   const setFavorite = useSetFavorite();
-  const remove = useRemovePhotos();
 
   useEffect(() => {
     if (!enabled) return;
@@ -109,15 +93,6 @@ export function useGlobalShortcuts(order: string[], opts: GridShortcutOptions = 
         if (ids.length) {
           e.preventDefault();
           setRating.mutate({ ids, rating: Number(e.key) });
-        }
-        return;
-      }
-      // Color labels 6–9.
-      if (COLOR_KEYS[e.key]) {
-        const ids = targets();
-        if (ids.length) {
-          e.preventDefault();
-          setColor.mutate({ ids, color: COLOR_KEYS[e.key] });
         }
         return;
       }
@@ -160,12 +135,13 @@ export function useGlobalShortcuts(order: string[], opts: GridShortcutOptions = 
         const ids = Array.from(useSelectionStore.getState().selected);
         if (ids.length > 0) {
           e.preventDefault();
-          remove.mutate(ids, { onSuccess: () => clear() });
+          // Open the shared dialog so the user picks library-only vs disk delete.
+          useDeleteDialog.getState().open(ids);
         }
       }
     };
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [order, enabled, onOpen, selectAll, select, selectRange, clear, setRating, setColor, setFavorite, remove]);
+  }, [order, enabled, onOpen, selectAll, select, selectRange, setRating, setFavorite]);
 }

@@ -120,6 +120,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let state = bootstrap(app)?;
             app.manage(Arc::clone(&state));
@@ -132,21 +134,26 @@ pub fn run() {
             api::photos::get_photo,
             api::photos::count_photos,
             api::photos::photo_timeline,
+            api::photos::photos_with_gps,
             api::photos::library_stats,
             api::photos::set_rating,
-            api::photos::set_color,
             api::photos::set_favorite,
             api::photos::remove_photos,
+            api::photos::delete_photos_from_disk,
             api::photos::restore_photos,
             api::photos::list_duplicates,
             api::photos::list_photo_ids,
             api::photos::save_edited_image,
+            api::photos::overwrite_original,
+            api::photos::set_capture_date,
             // thumbnails
             api::thumbnails::thumbnail_path,
             api::thumbnails::ensure_thumbnail,
+            api::thumbnails::display_preview,
             // scan / folders
             api::scan::scan_folders,
             api::scan::rescan_library,
+            api::scan::regenerate_thumbnails,
             api::scan::scan_progress,
             api::scan::list_watched_folders,
             api::scan::add_watched_folder,
@@ -162,11 +169,15 @@ pub fn run() {
             api::albums::list_albums,
             api::albums::get_album,
             api::albums::create_album,
+            api::albums::move_album,
             api::albums::rename_album,
             api::albums::delete_album,
             api::albums::add_to_album,
             api::albums::remove_from_album,
             api::albums::album_photos,
+            // import as albums
+            api::import::preview_import_tree,
+            api::import::import_as_albums,
             // settings / ai
             api::settings::get_config,
             api::settings::update_config,

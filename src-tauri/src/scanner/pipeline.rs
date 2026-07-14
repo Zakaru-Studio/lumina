@@ -16,7 +16,7 @@ use rayon::prelude::*;
 use tracing::warn;
 
 use crate::core::error::{Error, Result};
-use crate::core::models::{ColorLabel, Photo, ThumbStatus};
+use crate::core::models::{Photo, ThumbStatus};
 use crate::database::photos;
 use crate::events::{self, ScanPhase, ScanSummary};
 use crate::metadata::{self, Format};
@@ -193,13 +193,22 @@ fn index_one(
 
     let exif = metadata::read_exif(path).unwrap_or_default();
     let orientation = exif.orientation.unwrap_or(1);
-    let taken_at = exif.taken_at.or(file_created);
+    // Prefer the real EXIF capture time. When it's absent, fall back to the
+    // EARLIER of the file's created/modified times: on Windows a copied file's
+    // "created" is the copy date while "modified" is usually preserved from the
+    // original, so the minimum is the closest available proxy for capture time.
+    let taken_at = exif.taken_at.or_else(|| match (file_created, file_modified) {
+        (Some(c), Some(m)) => Some(c.min(m)),
+        (c, m) => c.or(m),
+    });
     let hash = hash_file(path).ok();
 
-    // Thumbnail (skipped for RAW/HEIC/video in the MVP — minimal read only).
-    let (thumb_status, thumb_path) = if !format.is_thumbnailable() {
-        (ThumbStatus::Failed, None)
-    } else {
+    // Thumbnail. Standard rasters, camera RAW (embedded preview) and video
+    // (ffmpeg poster frame) are all attempted; anything that still can't be
+    // decoded (e.g. HEIC without the feature, or video when ffmpeg is absent)
+    // records a `failed` status and shows a placeholder — the catalog entry is
+    // never dropped.
+    let (thumb_status, thumb_path) = {
         // Force regeneration so updated files get fresh thumbnails.
         let dst = ThumbnailService::path_for(thumb_root, id);
         let _ = std::fs::remove_file(&dst);
@@ -238,7 +247,6 @@ fn index_one(
         gps_lon: exif.gps_lon,
         hash,
         rating: 0,
-        color_label: ColorLabel::None,
         is_favorite: false,
         is_raw: format.is_raw_family(),
         thumb_status,
@@ -302,6 +310,9 @@ fn db_writer(
             }
         };
         for item in buffer.drain(..) {
+            // One discovery task = one result here, regardless of kind, so this
+            // is the clean 0..total progress measure.
+            counters.processed.fetch_add(1, Ordering::Relaxed);
             match item {
                 WorkerResult::Indexed { photo, is_update } => {
                     let ready = matches!(photo.thumb_status, ThumbStatus::Ready);

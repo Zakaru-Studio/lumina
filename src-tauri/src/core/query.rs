@@ -12,6 +12,11 @@ pub enum SortBy {
     Filename,
     Rating,
     FileSize,
+    /// Chronological day-bucket order used by the timeline view: sorts by the
+    /// same `COALESCE(taken_at, imported_at)` key the day sections are grouped
+    /// by, so the id list and the sections partition photos identically (photos
+    /// without `taken_at` would otherwise sort to the end and desync the two).
+    Timeline,
 }
 
 impl Default for SortBy {
@@ -42,7 +47,6 @@ pub struct PhotoFilter {
     pub text: Option<String>,
     /// Minimum star rating (inclusive).
     pub min_rating: Option<u8>,
-    pub color_label: Option<String>,
     pub is_favorite: Option<bool>,
     pub is_raw: Option<bool>,
     pub media_type: Option<String>,

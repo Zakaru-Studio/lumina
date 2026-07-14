@@ -5,9 +5,16 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 
 import * as api from "@/lib/api";
-import { onLibraryChanged, onScanDone, onScanProgress } from "@/lib/events";
+import {
+  onLibraryChanged,
+  onScanDone,
+  onScanProgress,
+  onThumbsRegenerated,
+} from "@/lib/events";
 import { qk } from "@/lib/query";
+import { useImportAlbumsDialog } from "@/stores/importAlbumsDialogStore";
 import { useScanStore } from "@/stores/scanStore";
+import { useUiStore } from "@/stores/uiStore";
 
 /**
  * Subscribe to backend scan events once (mount in the app shell). Updates the
@@ -36,6 +43,11 @@ export function useScanEvents() {
       const subs = await Promise.all([
         onScanProgress((p) => setProgress(p)),
         onLibraryChanged(invalidateThrottled),
+        onThumbsRegenerated(() => {
+          // Force every rendered thumbnail to re-fetch the overwritten file.
+          useUiStore.getState().bumpThumbCacheBust();
+          qc.invalidateQueries({ queryKey: qk.photos });
+        }),
         onScanDone((s) => {
           setSummary(s);
           qc.invalidateQueries({ queryKey: qk.photos });
@@ -73,14 +85,14 @@ export function useScanControls() {
   const qc = useQueryClient();
   const invalidateFolders = () => qc.invalidateQueries({ queryKey: qk.watchedFolders });
 
+  // Pick folders and hand off to the import dialog, which lets the user choose
+  // whether to create albums from the folder tree or just import the media.
+  // Folder registration + invalidation happen from the dialog's actions.
   const importFolders = useMutation({
-    mutationFn: async () => {
-      const paths = await api.pickFolders();
-      if (paths.length === 0) return [] as string[];
-      await api.scanFolders(paths);
-      return paths;
+    mutationFn: () => api.pickFolders(),
+    onSuccess: (paths) => {
+      if (paths.length > 0) useImportAlbumsDialog.getState().open(paths);
     },
-    onSuccess: invalidateFolders,
   });
 
   const addFolder = useMutation({

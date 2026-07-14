@@ -1,4 +1,5 @@
 import { Monitor, Moon, Sun } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -6,10 +7,10 @@ import { useUiStore } from "@/stores/uiStore";
 import type { Theme } from "@/types";
 
 const ORDER: Theme[] = ["light", "dark", "system"];
-const LABEL: Record<Theme, string> = {
-  light: "Light",
-  dark: "Dark",
-  system: "System",
+const LABEL_KEY: Record<Theme, string> = {
+  light: "themeToggle.light",
+  dark: "themeToggle.dark",
+  system: "themeToggle.system",
 };
 
 /**
@@ -17,10 +18,12 @@ const LABEL: Record<Theme, string> = {
  * globally via `useThemeSync` in the shell, so this only updates the store.
  */
 export function ThemeToggle() {
+  const { t } = useTranslation();
   const theme = useUiStore((s) => s.theme);
   const setTheme = useUiStore((s) => s.setTheme);
 
   const next = ORDER[(ORDER.indexOf(theme) + 1) % ORDER.length];
+  const themeLabel = t("themeToggle.label", { name: t(LABEL_KEY[theme]) });
 
   return (
     <Tooltip>
@@ -29,7 +32,7 @@ export function ThemeToggle() {
           variant="ghost"
           size="icon"
           className="no-drag"
-          aria-label={`Theme: ${LABEL[theme]}`}
+          aria-label={themeLabel}
           onClick={() => setTheme(next)}
         >
           {theme === "light" ? (
@@ -41,7 +44,7 @@ export function ThemeToggle() {
           )}
         </Button>
       </TooltipTrigger>
-      <TooltipContent>Theme: {LABEL[theme]}</TooltipContent>
+      <TooltipContent>{themeLabel}</TooltipContent>
     </Tooltip>
   );
 }

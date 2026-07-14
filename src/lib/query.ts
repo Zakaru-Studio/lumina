@@ -35,6 +35,7 @@ export const qk = {
   photoList: (query: PhotoQuery) => ["photos", "list", query] as const,
   photo: (id: string) => ["photos", "detail", id] as const,
   timeline: (filter: PhotoFilter) => ["photos", "timeline", filter] as const,
+  map: ["photos", "map"] as const,
   stats: ["stats"] as const,
   tags: ["tags"] as const,
   albums: ["albums"] as const,

@@ -7,10 +7,11 @@ use tauri::State;
 
 use crate::api::{blocking, now};
 use crate::core::error::Result;
-use crate::core::models::{ColorLabel, LibraryStats, Photo, TimelineSection};
+use crate::core::models::{LibraryStats, MapPoint, Photo, ThumbStatus, TimelineSection};
 use crate::core::query::{Page, PhotoFilter, PhotoQuery};
 use crate::core::state::SharedState;
 use crate::database::photos;
+use crate::thumbnail::ThumbnailService;
 
 /// List a page of photos matching a structured query.
 #[tauri::command]
@@ -59,6 +60,17 @@ pub async fn photo_timeline(
     .await
 }
 
+/// All geolocated photos as lightweight points for the map view.
+#[tauri::command]
+pub async fn photos_with_gps(state: State<'_, SharedState>) -> Result<Vec<MapPoint>> {
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        photos::with_gps(&conn)
+    })
+    .await
+}
+
 /// Library-wide statistics.
 #[tauri::command]
 pub async fn library_stats(state: State<'_, SharedState>) -> Result<LibraryStats> {
@@ -77,21 +89,6 @@ pub async fn set_rating(state: State<'_, SharedState>, ids: Vec<String>, rating:
     blocking(move || {
         let conn = state.db.get()?;
         photos::set_rating(&conn, &ids, rating)
-    })
-    .await
-}
-
-/// Set the color label for one or more photos.
-#[tauri::command]
-pub async fn set_color(
-    state: State<'_, SharedState>,
-    ids: Vec<String>,
-    color: String,
-) -> Result<()> {
-    let state = Arc::clone(&state);
-    blocking(move || {
-        let conn = state.db.get()?;
-        photos::set_color(&conn, &ids, ColorLabel::from_str_lenient(&color))
     })
     .await
 }
@@ -122,6 +119,39 @@ pub async fn remove_photos(state: State<'_, SharedState>, ids: Vec<String>) -> R
             state.thumbnails.invalidate(id);
         }
         Ok(removed)
+    })
+    .await
+}
+
+/// Delete photos from BOTH disk and catalog: sends the original files to the OS
+/// trash / Recycle Bin, purges their thumbnails, and drops the catalog rows
+/// (cascading to tag/album/AI links). The originals stay recoverable from the
+/// system trash, but the catalog rows are dropped and are not restored by this
+/// app. Missing files are ignored; the catalog rows are dropped regardless.
+/// Returns the count removed.
+#[tauri::command]
+pub async fn delete_photos_from_disk(
+    state: State<'_, SharedState>,
+    ids: Vec<String>,
+) -> Result<u64> {
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        let root = state.paths_snapshot().thumbnails;
+        for id in &ids {
+            // Best-effort: move the original to the OS trash. A missing/locked
+            // file (or a platform without a trash) must not abort the catalog
+            // cleanup for the rest of the batch.
+            if let Ok(photo) = photos::get(&conn, id) {
+                if let Err(err) = trash::delete(&photo.path) {
+                    tracing::warn!(path = %photo.path, %err, "could not move file to trash");
+                }
+            }
+            // Purge the thumbnail on disk and its in-memory cache entry.
+            let _ = std::fs::remove_file(ThumbnailService::path_for(&root, id));
+            state.thumbnails.invalidate(id);
+        }
+        photos::hard_delete(&conn, &ids)
     })
     .await
 }
@@ -166,6 +196,90 @@ pub async fn list_photo_ids(
     .await
 }
 
+/// Outcome of a batch capture-date edit, reported back to the UI.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetDateSummary {
+    /// Files whose capture date was set (catalog override applied). Every format
+    /// counts here — the override always takes effect in Lumina.
+    pub updated: u32,
+    /// Subset of `updated` whose date was also written into the file's EXIF
+    /// (JPEG/TIFF/PNG). RAW/HEIC/video get the catalog override only.
+    pub exif_written: u32,
+    /// Files that errored (missing photo, DB failure).
+    pub failed: u32,
+}
+
+/// Set the capture date/time for one or more photos. The date is always recorded
+/// as a catalog override (marked so rescans preserve it) — this covers every
+/// format including RAW and video. Additionally, for formats we can safely
+/// rewrite (JPEG/TIFF/PNG) the date is baked into the file's EXIF
+/// (`DateTimeOriginal`/`CreateDate`/`ModifyDate`) so other apps see it too; an
+/// EXIF-write failure is non-fatal (the catalog override still applies).
+/// `timestamp` is Unix seconds, interpreted in LOCAL time to mirror EXIF reads.
+#[tauri::command]
+pub async fn set_capture_date(
+    state: State<'_, SharedState>,
+    ids: Vec<String>,
+    timestamp: i64,
+) -> Result<SetDateSummary> {
+    use chrono::TimeZone;
+    use crate::metadata::exif_write;
+
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        // Interpret the instant in the machine's local zone, matching the EXIF
+        // reader, then hand the naive local date-time to the writer.
+        let naive = chrono::Local
+            .timestamp_opt(timestamp, 0)
+            .single()
+            .ok_or_else(|| crate::core::error::Error::Invalid("invalid timestamp".into()))?
+            .naive_local();
+
+        let mut summary = SetDateSummary { updated: 0, exif_written: 0, failed: 0 };
+        for id in &ids {
+            let Ok(photo) = photos::get(&conn, id) else {
+                summary.failed += 1;
+                continue;
+            };
+            let path = std::path::PathBuf::from(&photo.path);
+
+            // Best-effort: bake the date into the file's EXIF where supported. A
+            // failure here must not prevent the catalog override below.
+            let mut wrote_exif = false;
+            if exif_write::is_editable(&path) {
+                match exif_write::set_capture_date(&path, naive) {
+                    Ok(()) => wrote_exif = true,
+                    Err(e) => tracing::warn!(
+                        path = %photo.path, error = %e,
+                        "EXIF date write failed; applying catalog override only"
+                    ),
+                }
+            }
+
+            // Always apply the catalog override (survives rescans; covers all
+            // formats). Refresh size/mtime from the file (changed iff EXIF written).
+            let size = std::fs::metadata(&path)
+                .map(|m| m.len() as i64)
+                .unwrap_or(photo.file_size);
+            let modified = crate::scanner::discovery::modified_secs(&path).or(photo.file_modified);
+            match photos::set_taken_at(&conn, id, timestamp, size, modified) {
+                Ok(()) => {
+                    state.thumbnails.invalidate(id);
+                    summary.updated += 1;
+                    if wrote_exif {
+                        summary.exif_written += 1;
+                    }
+                }
+                Err(_) => summary.failed += 1,
+            }
+        }
+        Ok(summary)
+    })
+    .await
+}
+
 /// Save an edited image (base64-encoded PNG/JPEG/WebP bytes) as a NEW file at
 /// `dest_path`. The original is never modified — this only ever writes a copy.
 #[tauri::command]
@@ -186,6 +300,76 @@ pub async fn save_edited_image(dest_path: String, data_base64: String) -> Result
         }
         std::fs::write(path, &bytes)?;
         Ok(dest_path)
+    })
+    .await
+}
+
+/// Overwrite a photo's ORIGINAL file in place with edited image bytes
+/// (base64/data-URL), then refresh its derived metadata (dimensions,
+/// orientation, size) and regenerate its thumbnail. Unlike [`save_edited_image`]
+/// this REPLACES the source file — a destructive, irreversible action. Catalog
+/// fields (rating, color, favorite, tags, album membership) are preserved.
+#[tauri::command]
+pub async fn overwrite_original(
+    state: State<'_, SharedState>,
+    id: String,
+    data_base64: String,
+) -> Result<()> {
+    use base64::Engine;
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        let mut photo = photos::get(&conn, &id)?;
+
+        // Accept raw base64 or a full data URL (`data:image/...;base64,....`).
+        let payload = data_base64
+            .split_once(",")
+            .map(|(_, b)| b)
+            .unwrap_or(&data_base64);
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(payload.trim())
+            .map_err(|e| crate::core::error::Error::Invalid(format!("invalid image data: {e}")))?;
+
+        // Replace the original in place.
+        let path = std::path::PathBuf::from(&photo.path);
+        std::fs::write(&path, &bytes)?;
+
+        // Refresh derived metadata from the new bytes. The editor bakes any EXIF
+        // orientation into the pixels and the canvas export carries no EXIF, so
+        // orientation resets to 1.
+        if let Ok((w, h)) = image::image_dimensions(&path) {
+            photo.width = w;
+            photo.height = h;
+        }
+        photo.orientation = 1;
+        photo.file_size = std::fs::metadata(&path)
+            .map(|m| m.len() as i64)
+            .unwrap_or(photo.file_size);
+        // Bump the mtime marker so cache-busted thumbnail/original URLs refresh.
+        photo.file_modified = Some(now());
+
+        // Regenerate the thumbnail from the edited file.
+        let cfg = state.config_snapshot();
+        let root = state.paths_snapshot().thumbnails;
+        let dst = ThumbnailService::path_for(&root, &id);
+        let _ = std::fs::remove_file(&dst);
+        let (status, thumb_path) =
+            match state.thumbnails.ensure(&path, &root, &id, cfg.thumbnail_size, 1) {
+                Ok(p) => (ThumbStatus::Ready, Some(p.to_string_lossy().to_string())),
+                Err(e) => {
+                    tracing::warn!(error = %e, "thumbnail regeneration after overwrite failed");
+                    (ThumbStatus::Failed, None)
+                }
+            };
+        photo.thumb_status = status;
+        photo.thumb_path = thumb_path.clone();
+
+        // Persist. `upsert` refreshes dimensions/orientation/size while
+        // preserving catalog fields (ON CONFLICT skips them); it does not touch
+        // the thumbnail columns, so `set_thumb` records those separately.
+        photos::upsert(&conn, &photo)?;
+        photos::set_thumb(&conn, &id, photo.thumb_status, thumb_path.as_deref())?;
+        Ok(())
     })
     .await
 }

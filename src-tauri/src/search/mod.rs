@@ -8,7 +8,7 @@
 use rusqlite::{params, Connection};
 
 use crate::core::error::Result;
-use crate::core::models::{ColorLabel, Photo};
+use crate::core::models::Photo;
 
 /// Combine make + model into a single searchable "camera" string.
 fn camera_text(make: Option<&str>, model: Option<&str>) -> String {
@@ -29,16 +29,15 @@ fn upsert_row(
     camera: &str,
     lens: &str,
     tags: &str,
-    color: &str,
 ) -> Result<()> {
     conn.execute(
         "DELETE FROM photos_fts WHERE photo_id = ?1",
         params![photo_id],
     )?;
     conn.execute(
-        "INSERT INTO photos_fts (photo_id, filename, folder, camera, lens, tags, color) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![photo_id, filename, folder, camera, lens, tags, color],
+        "INSERT INTO photos_fts (photo_id, filename, folder, camera, lens, tags) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![photo_id, filename, folder, camera, lens, tags],
     )?;
     Ok(())
 }
@@ -53,14 +52,13 @@ pub fn index_photo(conn: &Connection, id: &str, p: &Photo, tags: &[String]) -> R
         &camera_text(p.camera_make.as_deref(), p.camera_model.as_deref()),
         p.lens.as_deref().unwrap_or(""),
         &tags.join(" "),
-        p.color_label.as_str(),
     )
 }
 
 /// Rebuild the FTS row for a photo from current database state.
 pub fn reindex(conn: &Connection, id: &str) -> Result<()> {
     let row = conn.query_row(
-        "SELECT filename, folder, camera_make, camera_model, lens, color_label \
+        "SELECT filename, folder, camera_make, camera_model, lens \
          FROM photos WHERE id = ?1",
         params![id],
         |r| {
@@ -70,11 +68,10 @@ pub fn reindex(conn: &Connection, id: &str) -> Result<()> {
                 r.get::<_, Option<String>>(2)?,
                 r.get::<_, Option<String>>(3)?,
                 r.get::<_, Option<String>>(4)?,
-                r.get::<_, String>(5)?,
             ))
         },
     );
-    let (filename, folder, make, model, lens, color) = match row {
+    let (filename, folder, make, model, lens) = match row {
         Ok(v) => v,
         Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(()),
         Err(e) => return Err(e.into()),
@@ -88,17 +85,11 @@ pub fn reindex(conn: &Connection, id: &str) -> Result<()> {
         &camera_text(make.as_deref(), model.as_deref()),
         lens.as_deref().unwrap_or(""),
         &tags.join(" "),
-        &color,
     )
 }
 
 /// Convenience alias used after tag edits.
 pub fn reindex_tags(conn: &Connection, id: &str) -> Result<()> {
-    reindex(conn, id)
-}
-
-/// Convenience alias used after a color-label change (value already persisted).
-pub fn reindex_color(conn: &Connection, id: &str, _color: ColorLabel) -> Result<()> {
     reindex(conn, id)
 }
 

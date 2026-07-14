@@ -40,7 +40,6 @@ pub struct Photo {
 
     pub hash: Option<String>,
     pub rating: u8,
-    pub color_label: ColorLabel,
     pub is_favorite: bool,
     pub is_raw: bool,
 
@@ -71,41 +70,6 @@ impl MediaType {
         match s {
             "video" => MediaType::Video,
             _ => MediaType::Photo,
-        }
-    }
-}
-
-/// Lightroom-style color label.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ColorLabel {
-    None,
-    Red,
-    Yellow,
-    Green,
-    Blue,
-    Purple,
-}
-
-impl ColorLabel {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ColorLabel::None => "none",
-            ColorLabel::Red => "red",
-            ColorLabel::Yellow => "yellow",
-            ColorLabel::Green => "green",
-            ColorLabel::Blue => "blue",
-            ColorLabel::Purple => "purple",
-        }
-    }
-    pub fn from_str_lenient(s: &str) -> Self {
-        match s {
-            "red" => ColorLabel::Red,
-            "yellow" => ColorLabel::Yellow,
-            "green" => ColorLabel::Green,
-            "blue" => ColorLabel::Blue,
-            "purple" => ColorLabel::Purple,
-            _ => ColorLabel::None,
         }
     }
 }
@@ -161,6 +125,10 @@ pub struct Album {
     pub icon: Option<String>,
     pub sort_order: i64,
     pub created_at: i64,
+    /// Parent album id for nesting (`None` for a root album). Manual albums
+    /// only; smart albums always keep this `None`.
+    #[serde(default)]
+    pub parent_id: Option<String>,
     #[serde(default)]
     pub count: i64,
 }
@@ -207,6 +175,20 @@ pub struct TimelineSection {
     pub month: u32,
     pub day: u32,
     pub count: i64,
+}
+
+/// A lightweight geolocated point for the map view: just enough to plot a
+/// marker and render its thumbnail, without the full [`Photo`] payload. Only
+/// photos carrying both GPS coordinates are ever projected into this shape.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MapPoint {
+    pub id: String,
+    pub gps_lat: f64,
+    pub gps_lon: f64,
+    pub filename: String,
+    pub taken_at: Option<i64>,
+    pub thumb_path: Option<String>,
 }
 
 /// Aggregate library statistics for dashboards / empty states.

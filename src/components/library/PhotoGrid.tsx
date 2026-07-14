@@ -46,21 +46,30 @@ export function PhotoGrid({ ids, getPhoto, onOpen, onVisibleRangeChange }: Photo
   const selected = useSelectionStore((s) => s.selected);
   const anchor = useSelectionStore((s) => s.anchor);
 
-  // Measure container width so column count reacts to layout/zoom.
+  // Measure the container's CONTENT width (excludes padding and the scrollbar)
+  // so cells can be sized to fill it exactly.
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    setWidth(el.clientWidth);
-    const ro = new ResizeObserver((entries) => {
-      for (const entry of entries) setWidth(entry.contentRect.width);
-    });
+    const measure = () => {
+      const style = getComputedStyle(el);
+      const padX = parseFloat(style.paddingLeft || "0") + parseFloat(style.paddingRight || "0");
+      setWidth(Math.max(1, el.clientWidth - padX));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
+  // `cellSize` (the zoom level) is the TARGET cell size: it picks the column
+  // count, then the actual cell width flexes so every full row fills 100% of the
+  // content width — no dead space on the right. The last partial row stays
+  // left-aligned with same-size cells.
   const columns = Math.max(1, Math.floor((width + GAP) / (cellSize + GAP)));
+  const cell = Math.max(1, (width - (columns - 1) * GAP) / columns);
   const rowCount = Math.ceil(ids.length / columns);
-  const rowSize = cellSize + GAP;
+  const rowSize = cell + GAP;
 
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
@@ -150,7 +159,7 @@ export function PhotoGrid({ ids, getPhoto, onOpen, onVisibleRangeChange }: Photo
                 if (!id) return null;
                 const photo = getPhoto(index);
                 return (
-                  <div key={id} style={{ width: cellSize, height: cellSize }}>
+                  <div key={id} style={{ width: cell, height: cell }}>
                     {photo ? (
                       <PhotoCell
                         photo={photo}

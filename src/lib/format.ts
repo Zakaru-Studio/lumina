@@ -1,6 +1,19 @@
 /** Presentation helpers for formatting metadata (pure, no side effects). */
 import { format, fromUnixTime } from "date-fns";
+import { enUS, fr } from "date-fns/locale";
+import type { Locale } from "date-fns";
+
+import i18n from "@/i18n";
 import type { Photo } from "@/types";
+
+/**
+ * The date-fns locale matching the active UI language, so weekday/month names in
+ * formatted dates are localized (e.g. "lundi 3 mars 2025" in French). Read from
+ * the i18next singleton at call time so it always reflects the current language.
+ */
+export function dateLocale(): Locale {
+  return i18n.language?.startsWith("fr") ? fr : enUS;
+}
 
 /** Human-readable file size. */
 export function formatBytes(bytes: number): string {
@@ -14,13 +27,13 @@ export function formatBytes(bytes: number): string {
 /** Format a Unix-seconds timestamp, or a dash when absent. */
 export function formatDate(ts: number | null, pattern = "PP"): string {
   if (!ts) return "—";
-  return format(fromUnixTime(ts), pattern);
+  return format(fromUnixTime(ts), pattern, { locale: dateLocale() });
 }
 
 /** Format the best-known capture date/time of a photo. */
 export function formatTaken(photo: Photo): string {
   const ts = photo.takenAt ?? photo.fileCreated ?? photo.importedAt;
-  return format(fromUnixTime(ts), "PPpp");
+  return format(fromUnixTime(ts), "PPpp", { locale: dateLocale() });
 }
 
 /** Compact EXIF exposure summary, e.g. "50mm · f/1.8 · 1/250 · ISO 100". */

@@ -2,5 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
+    // Entry point — all wiring lives in `lumina_lib::run`.
     lumina_lib::run();
 }

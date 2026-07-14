@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { ArrowDownWideNarrow, ArrowUpWideNarrow, Search, SlidersHorizontal } from "lucide-react";
 
-import { ColorLabelPicker } from "@/components/common/ColorLabelPicker";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StarRating } from "@/components/common/StarRating";
 import { Lightbox } from "@/components/library/Lightbox";
@@ -22,25 +22,26 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useAlbums } from "@/hooks/useAlbums";
 import { useGlobalShortcuts } from "@/hooks/useKeyboard";
-import { flattenPhotos, usePhotoList } from "@/hooks/usePhotos";
+import { usePhotoIds, usePhotoWindow } from "@/hooks/useWindowedPhotos";
 import { buildQuery } from "@/lib/query";
-import type { ColorLabel, PhotoFilter, SortBy, SortDir } from "@/types";
+import type { PhotoFilter, SortBy, SortDir } from "@/types";
 
-/** Human labels for the sortable columns. */
-const SORT_OPTIONS: { value: SortBy; label: string }[] = [
-  { value: "takenAt", label: "Date taken" },
-  { value: "importedAt", label: "Imported" },
-  { value: "filename", label: "Name" },
-  { value: "rating", label: "Rating" },
-  { value: "fileSize", label: "Size" },
+/** Human labels for the sortable columns (labelKey resolved via i18n). */
+const SORT_OPTIONS: { value: SortBy; labelKey: string }[] = [
+  { value: "takenAt", labelKey: "searchPage.sort.takenAt" },
+  { value: "importedAt", labelKey: "searchPage.sort.importedAt" },
+  { value: "filename", labelKey: "searchPage.sort.filename" },
+  { value: "rating", labelKey: "searchPage.sort.rating" },
+  { value: "fileSize", labelKey: "searchPage.sort.fileSize" },
 ];
 
 /**
  * Instant, faceted search. Free-text query is debounced; rating, favorites,
- * RAW, color and camera/lens facets refine the result set live. Results render
+ * RAW and camera/lens facets refine the result set live. Results render
  * in the same virtualized grid as the library.
  */
 export function SearchPage() {
+  const { t } = useTranslation();
   const [searchParams] = useSearchParams();
   const initialText = searchParams.get("q") ?? "";
 
@@ -49,7 +50,6 @@ export function SearchPage() {
   const [minRating, setMinRating] = useState(0);
   const [favorites, setFavorites] = useState(false);
   const [rawOnly, setRawOnly] = useState(false);
-  const [color, setColor] = useState<ColorLabel>("none");
   const [camera, setCamera] = useState("");
   const [lens, setLens] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("takenAt");
@@ -66,11 +66,10 @@ export function SearchPage() {
       minRating: minRating > 0 ? minRating : null,
       isFavorite: favorites ? true : null,
       isRaw: rawOnly ? true : null,
-      colorLabel: color !== "none" ? color : null,
       cameraModel: camera.trim() || null,
       lens: lens.trim() || null,
     }),
-    [debounced, minRating, favorites, rawOnly, color, camera, lens],
+    [debounced, minRating, favorites, rawOnly, camera, lens],
   );
 
   const hasCriteria =
@@ -78,7 +77,6 @@ export function SearchPage() {
     !!filter.minRating ||
     !!filter.isFavorite ||
     !!filter.isRaw ||
-    !!filter.colorLabel ||
     !!filter.cameraModel ||
     !!filter.lens;
 
@@ -86,15 +84,14 @@ export function SearchPage() {
     () => buildQuery({ filter, sortBy, sortDir }),
     [filter, sortBy, sortDir],
   );
-  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = usePhotoList(query);
-
-  const photos = useMemo(() => flattenPhotos(data?.pages), [data]);
-  const order = useMemo(() => photos.map((p) => p.id), [photos]);
+  // Windowed model, only active once the user has entered any search criteria.
+  const { data: ids = [], isLoading } = usePhotoIds(query, hasCriteria);
+  const win = usePhotoWindow(query, hasCriteria);
 
   const { data: albums = [] } = useAlbums();
   const [index, setIndex] = useState<number | null>(null);
-  useGlobalShortcuts(order, { onOpen: setIndex, enabled: index === null });
-  const total = data?.pages[0]?.total ?? 0;
+  useGlobalShortcuts(ids, { onOpen: setIndex, enabled: index === null });
+  const total = win.total;
 
   return (
     <div className="flex h-full flex-col">
@@ -106,7 +103,7 @@ export function SearchPage() {
             autoFocus
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Search by filename, camera, tag…"
+            placeholder={t("searchPage.searchPlaceholder")}
             className="h-11 pl-9 text-base"
           />
         </div>
@@ -114,42 +111,38 @@ export function SearchPage() {
         <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="h-4 w-4" />
-            <span>Filters</span>
+            <span>{t("searchPage.filters")}</span>
           </div>
           <div className="flex items-center gap-2">
-            <Label className="text-muted-foreground">Min rating</Label>
+            <Label className="text-muted-foreground">{t("searchPage.minRating")}</Label>
             <StarRating value={minRating} onChange={setMinRating} size={16} />
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="fav-switch" className="text-muted-foreground">
-              Favorites
+              {t("searchPage.favorites")}
             </Label>
             <Switch id="fav-switch" checked={favorites} onCheckedChange={setFavorites} />
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="raw-switch" className="text-muted-foreground">
-              RAW only
+              {t("searchPage.rawOnly")}
             </Label>
             <Switch id="raw-switch" checked={rawOnly} onCheckedChange={setRawOnly} />
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-muted-foreground">Color</Label>
-            <ColorLabelPicker value={color} onChange={setColor} />
           </div>
           <Input
             value={camera}
             onChange={(e) => setCamera(e.target.value)}
-            placeholder="Camera"
+            placeholder={t("searchPage.camera")}
             className="h-8 w-36"
           />
           <Input
             value={lens}
             onChange={(e) => setLens(e.target.value)}
-            placeholder="Lens"
+            placeholder={t("searchPage.lens")}
             className="h-8 w-36"
           />
           <div className="flex items-center gap-2">
-            <Label className="text-muted-foreground">Sort</Label>
+            <Label className="text-muted-foreground">{t("searchPage.sort.label")}</Label>
             <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortBy)}>
               <SelectTrigger className="h-8 w-[9.5rem]">
                 <SelectValue />
@@ -157,7 +150,7 @@ export function SearchPage() {
               <SelectContent>
                 {SORT_OPTIONS.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -166,8 +159,8 @@ export function SearchPage() {
               variant="ghost"
               size="icon"
               className="h-8 w-8"
-              aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
-              title={sortDir === "asc" ? "Ascending" : "Descending"}
+              aria-label={sortDir === "asc" ? t("searchPage.ascending") : t("searchPage.descending")}
+              title={sortDir === "asc" ? t("searchPage.ascending") : t("searchPage.descending")}
               onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
             >
               {sortDir === "asc" ? (
@@ -181,7 +174,7 @@ export function SearchPage() {
 
         {hasCriteria ? (
           <p className="text-xs text-muted-foreground">
-            {total.toLocaleString()} {total === 1 ? "result" : "results"}
+            {t("searchPage.resultCount", { count: total, formattedCount: total.toLocaleString() })}
           </p>
         ) : null}
       </div>
@@ -191,8 +184,8 @@ export function SearchPage() {
         {!hasCriteria ? (
           <EmptyState
             icon={<Search className="h-6 w-6" />}
-            title="Search your library"
-            description="Start typing or apply a filter to find photos across your entire catalog."
+            title={t("searchPage.prompt.title")}
+            description={t("searchPage.prompt.description")}
           />
         ) : isLoading ? (
           <div className="grid grid-cols-6 gap-2.5 p-3">
@@ -200,28 +193,28 @@ export function SearchPage() {
               <Skeleton key={i} className="aspect-square rounded-lg" />
             ))}
           </div>
-        ) : photos.length === 0 ? (
+        ) : ids.length === 0 ? (
           <EmptyState
             icon={<Search className="h-6 w-6" />}
-            title="No matches"
-            description="Try loosening your filters or a different search term."
+            title={t("searchPage.noMatches.title")}
+            description={t("searchPage.noMatches.description")}
           />
         ) : (
           <PhotoGrid
-            photos={photos}
+            ids={ids}
+            getPhoto={win.getPhoto}
             onOpen={setIndex}
-            hasNextPage={hasNextPage}
-            isFetchingNextPage={isFetchingNextPage}
-            fetchNextPage={fetchNextPage}
+            onVisibleRangeChange={win.setRange}
           />
         )}
       </div>
 
       <Lightbox
-        photos={photos}
+        ids={ids}
         index={index}
         onClose={() => setIndex(null)}
         onIndexChange={setIndex}
+        getPhoto={win.getPhoto}
       />
       <SelectionToolbar albums={albums} />
     </div>

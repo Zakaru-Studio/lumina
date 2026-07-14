@@ -1,22 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 import { useScanStore } from "@/stores/scanStore";
 
-/** Human labels for each scan phase. */
-const PHASE_LABEL: Record<string, string> = {
-  discovering: "Discovering",
-  indexing: "Indexing",
-  thumbnailing: "Generating thumbnails",
-  idle: "Idle",
-};
-
-/** Format a seconds duration as `m:ss` (or `<1m`). */
-function formatEta(seconds: number): string {
+/** Format a seconds duration as an ETA label using the current translations. */
+function formatEta(seconds: number, t: TFunction): string {
   if (!isFinite(seconds) || seconds <= 0) return "";
-  if (seconds < 60) return `~${Math.ceil(seconds)}s left`;
+  if (seconds < 60) return t("scan.etaSeconds", { s: Math.ceil(seconds) });
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
-  return `~${m}m ${s.toString().padStart(2, "0")}s left`;
+  return t("scan.etaMinutes", { m, s: s.toString().padStart(2, "0") });
 }
 
 /**
@@ -25,14 +19,29 @@ function formatEta(seconds: number): string {
  * measure and derives a smoothed throughput (items/s) and ETA. No spinner.
  */
 export function ScanProgressBar() {
+  const { t } = useTranslation();
   const progress = useScanStore((s) => s.progress);
+  const setBarHeight = useScanStore((s) => s.setBarHeight);
+
+  // Report the bar's live height (0 when hidden) so bottom-anchored overlays can
+  // position themselves relative to it. Runs after every render — cheap, and
+  // `setBarHeight` no-ops when the value is unchanged.
+  const barRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = barRef.current;
+    setBarHeight(el ? el.offsetHeight : 0);
+  });
+  useEffect(() => () => setBarHeight(0), [setBarHeight]);
 
   // Smoothed throughput (processed units per second) via an EMA over samples.
   const rateRef = useRef(0);
   const lastRef = useRef<{ t: number; processed: number } | null>(null);
   const [rate, setRate] = useState(0);
 
-  const processed = progress ? progress.indexed + progress.thumbnailed : 0;
+  // `processed` counts completed tasks (index *or* thumbnail) and reaches
+  // `total` exactly — unlike `indexed + thumbnailed`, which double-counts index
+  // tasks (they also emit a thumbnail) and so never matched `total`.
+  const processed = progress ? progress.processed : 0;
 
   useEffect(() => {
     if (!progress || progress.phase === "idle") {
@@ -58,24 +67,28 @@ export function ScanProgressBar() {
 
   if (!progress || progress.phase === "idle") return null;
 
-  const { phase, indexed, total } = progress;
-  const totalWork = total * 2;
-  const pct = totalWork > 0 ? Math.max(0, Math.min(100, (processed / totalWork) * 100)) : 0;
+  const { phase, total } = progress;
+  const pct = total > 0 ? Math.max(0, Math.min(100, (processed / total) * 100)) : 0;
 
   const detail =
     phase === "discovering"
-      ? `${progress.discovered.toLocaleString()} found`
-      : `${indexed.toLocaleString()} / ${total.toLocaleString()}`;
+      ? t("scan.foundCount", { n: progress.discovered.toLocaleString() })
+      : `${processed.toLocaleString()} / ${total.toLocaleString()}`;
 
-  const remaining = Math.max(0, totalWork - processed);
-  const eta = rate > 0 ? formatEta(remaining / rate) : "";
+  const remaining = Math.max(0, total - processed);
+  const eta = rate > 0 ? formatEta(remaining / rate, t) : "";
   const rateLabel = rate >= 1 ? `${Math.round(rate)}/s` : "";
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 animate-fade-in-up">
-      <div className="mx-3 mb-3 rounded-xl bg-card px-4 py-2.5 shadow-lg">
+    <div
+      ref={barRef}
+      className="pointer-events-none absolute inset-x-0 bottom-0 z-30 animate-fade-in-up"
+    >
+      <div className="border-t border-border bg-card px-4 py-2.5 shadow-[0_-2px_10px_rgba(0,0,0,0.08)]">
         <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
-          <span className="font-medium text-foreground">{PHASE_LABEL[phase] ?? phase}</span>
+          <span className="font-medium text-foreground">
+            {t(`scan.phase.${phase}`, { defaultValue: phase })}
+          </span>
           <span className="flex items-center gap-2 text-muted-foreground">
             {rateLabel ? <span>{rateLabel}</span> : null}
             {eta ? <span>· {eta}</span> : null}

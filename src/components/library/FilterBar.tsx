@@ -1,6 +1,6 @@
-import { ArrowDownWideNarrow, ArrowUpWideNarrow, Aperture, Heart } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpWideNarrow, Aperture, Heart, LayoutGrid } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
-import { ColorLabelPicker } from "@/components/common/ColorLabelPicker";
 import { StarRating } from "@/components/common/StarRating";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,8 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import type { ColorLabel, PhotoQuery, SortBy, SortDir } from "@/types";
+import { useUiStore } from "@/stores/uiStore";
+import type { PhotoQuery, SortBy, SortDir } from "@/types";
+
+/** Five grid cell-size breakpoints (px), smallest → largest, for the size slider. */
+const GRID_SIZE_STOPS = [112, 148, 184, 232, 300];
 
 /** Props for {@link FilterBar}. */
 export interface FilterBarProps {
@@ -21,13 +26,13 @@ export interface FilterBarProps {
   onChange: (q: PhotoQuery) => void;
 }
 
-/** Human labels for the sortable columns. */
-const SORT_OPTIONS: { value: SortBy; label: string }[] = [
-  { value: "takenAt", label: "Date taken" },
-  { value: "importedAt", label: "Imported" },
-  { value: "filename", label: "Name" },
-  { value: "rating", label: "Rating" },
-  { value: "fileSize", label: "Size" },
+/** Sortable columns paired with their i18n label keys. */
+const SORT_OPTIONS: { value: SortBy; labelKey: string }[] = [
+  { value: "takenAt", labelKey: "filters.sort.takenAt" },
+  { value: "importedAt", labelKey: "filters.sort.importedAt" },
+  { value: "filename", labelKey: "filters.sort.filename" },
+  { value: "rating", labelKey: "filters.sort.rating" },
+  { value: "fileSize", labelKey: "filters.sort.fileSize" },
 ];
 
 /**
@@ -36,7 +41,19 @@ const SORT_OPTIONS: { value: SortBy; label: string }[] = [
  * (never mutating the previous one) with `offset` reset so paging restarts.
  */
 export function FilterBar({ query, onChange }: FilterBarProps) {
+  const { t } = useTranslation();
   const { filter } = query;
+
+  const cellSize = useUiStore((s) => s.cellSize);
+  const setCellSize = useUiStore((s) => s.setCellSize);
+  // Snap the current cell size to the nearest breakpoint for the slider position.
+  const sizeIndex = GRID_SIZE_STOPS.reduce(
+    (best, _, i) =>
+      Math.abs(GRID_SIZE_STOPS[i] - cellSize) < Math.abs(GRID_SIZE_STOPS[best] - cellSize)
+        ? i
+        : best,
+    0,
+  );
 
   /** Emit a new query with a patched filter, resetting the paging offset. */
   const patchFilter = (patch: Partial<PhotoQuery["filter"]>): void => {
@@ -49,15 +66,10 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
   };
 
   const minRating = filter.minRating ?? 0;
-  const colorLabel = (filter.colorLabel ?? "none") as ColorLabel;
   const favoritesActive = filter.isFavorite === true;
   const rawActive = filter.isRaw === true;
 
-  const isFiltered =
-    favoritesActive ||
-    rawActive ||
-    minRating > 0 ||
-    colorLabel !== "none";
+  const isFiltered = favoritesActive || rawActive || minRating > 0;
 
   /** Reset every filter facet (leaving sort untouched). */
   const clearFilters = (): void => {
@@ -68,7 +80,6 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
         isFavorite: undefined,
         isRaw: undefined,
         minRating: undefined,
-        colorLabel: undefined,
       },
       offset: 0,
     });
@@ -84,7 +95,7 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
         <SelectContent>
           {SORT_OPTIONS.map((opt) => (
             <SelectItem key={opt.value} value={opt.value}>
-              {opt.label}
+              {t(opt.labelKey)}
             </SelectItem>
           ))}
         </SelectContent>
@@ -94,8 +105,8 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
         variant="ghost"
         size="icon"
         className="h-8 w-8"
-        aria-label={query.sortDir === "asc" ? "Ascending" : "Descending"}
-        title={query.sortDir === "asc" ? "Ascending" : "Descending"}
+        aria-label={query.sortDir === "asc" ? t("filters.ascending") : t("filters.descending")}
+        title={query.sortDir === "asc" ? t("filters.ascending") : t("filters.descending")}
         onClick={() => patchSort({ sortDir: query.sortDir === "asc" ? "desc" : "asc" })}
       >
         {query.sortDir === "asc" ? (
@@ -116,7 +127,7 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
         onClick={() => patchFilter({ isFavorite: favoritesActive ? undefined : true })}
       >
         <Heart className={cn("h-4 w-4", favoritesActive && "fill-current text-red-500")} />
-        Favorites
+        {t("filters.favorites")}
       </Button>
 
       <Button
@@ -127,7 +138,7 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
         onClick={() => patchFilter({ isRaw: rawActive ? undefined : true })}
       >
         <Aperture className="h-4 w-4" />
-        RAW
+        {t("filters.raw")}
       </Button>
 
       {/* Min rating: clicking the active value clears it (StarRating -> 0). */}
@@ -139,22 +150,32 @@ export function FilterBar({ query, onChange }: FilterBarProps) {
         />
       </div>
 
-      {/* Color label filter */}
-      <ColorLabelPicker
-        value={colorLabel}
-        onChange={(c) => patchFilter({ colorLabel: c === "none" ? undefined : c })}
-      />
+      <div className="ml-auto flex items-center gap-2">
+        {isFiltered ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 text-muted-foreground"
+            onClick={clearFilters}
+          >
+            {t("filters.clear")}
+          </Button>
+        ) : null}
 
-      {isFiltered ? (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="ml-auto h-8 text-muted-foreground"
-          onClick={clearFilters}
-        >
-          Clear
-        </Button>
-      ) : null}
+        {/* Grid cell size: five breakpoints from small to large. */}
+        <div className="flex items-center gap-1.5" title={t("filters.gridSize")}>
+          <LayoutGrid className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <Slider
+            className="w-24"
+            min={0}
+            max={GRID_SIZE_STOPS.length - 1}
+            step={1}
+            value={[sizeIndex]}
+            onValueChange={(v) => setCellSize(GRID_SIZE_STOPS[v[0]])}
+            aria-label={t("filters.gridSize")}
+          />
+        </div>
+      </div>
     </div>
   );
 }

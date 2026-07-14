@@ -1,7 +1,7 @@
 //! Integration tests exercising the database, search (FTS5), tags and album
 //! logic end-to-end against a temporary SQLite database.
 
-use lumina_lib::core::models::{ColorLabel, MediaType, Photo, ThumbStatus};
+use lumina_lib::core::models::{MediaType, Photo, ThumbStatus};
 use lumina_lib::core::query::{PhotoFilter, PhotoQuery};
 use lumina_lib::database::{albums, photos, tags, Database};
 
@@ -40,7 +40,6 @@ fn sample_photo(id: &str, path: &str, filename: &str) -> Photo {
         gps_lon: None,
         hash: Some("deadbeef".to_string()),
         rating: 0,
-        color_label: ColorLabel::None,
         is_favorite: false,
         is_raw: false,
         thumb_status: ThumbStatus::Ready,
@@ -78,6 +77,41 @@ fn upsert_is_idempotent_by_path() {
 }
 
 #[test]
+fn overridden_capture_date_survives_rescan() {
+    let (_dir, db) = temp_db();
+    let conn = db.get().unwrap();
+
+    // Initial index: taken_at from the file.
+    let mut p = sample_photo("id-1", "/photos/a.jpg", "a.jpg");
+    p.taken_at = Some(3_600_000_000); // a wrong, far-future date
+    photos::upsert(&conn, &p).unwrap();
+
+    // User corrects the date (catalog override).
+    let corrected = 1_245_069_000; // 2009
+    photos::set_taken_at(&conn, "id-1", corrected, p.file_size, p.file_modified).unwrap();
+    assert_eq!(photos::get(&conn, "id-1").unwrap().taken_at, Some(corrected));
+
+    // A rescan re-upserts the same path with the file's (still wrong) date.
+    // The override must win.
+    let mut rescanned = p.clone();
+    rescanned.taken_at = Some(3_600_000_000);
+    photos::upsert(&conn, &rescanned).unwrap();
+    assert_eq!(
+        photos::get(&conn, "id-1").unwrap().taken_at,
+        Some(corrected),
+        "overridden date must be preserved across a rescan"
+    );
+
+    // A non-overridden photo is still updated normally by a rescan.
+    let mut q = sample_photo("id-2", "/photos/b.jpg", "b.jpg");
+    q.taken_at = Some(1_000_000_000);
+    photos::upsert(&conn, &q).unwrap();
+    q.taken_at = Some(1_500_000_000);
+    photos::upsert(&conn, &q).unwrap();
+    assert_eq!(photos::get(&conn, "id-2").unwrap().taken_at, Some(1_500_000_000));
+}
+
+#[test]
 fn full_text_search_matches_filename_and_camera() {
     let (_dir, db) = temp_db();
     let conn = db.get().unwrap();
@@ -104,12 +138,10 @@ fn ratings_favorites_and_soft_delete_are_non_destructive() {
 
     photos::set_rating(&conn, &["id-1".into()], 5).unwrap();
     photos::set_favorite(&conn, &["id-1".into()], true).unwrap();
-    photos::set_color(&conn, &["id-1".into()], ColorLabel::Red).unwrap();
 
     let p = photos::get(&conn, "id-1").unwrap();
     assert_eq!(p.rating, 5);
     assert!(p.is_favorite);
-    assert_eq!(p.color_label, ColorLabel::Red);
 
     let removed = photos::soft_delete(&conn, &["id-1".into()], 1_700_000_200).unwrap();
     assert_eq!(removed, 1);
@@ -153,9 +185,47 @@ fn smart_albums_are_seeded() {
     let (_dir, db) = temp_db();
     let conn = db.get().unwrap();
     let list = albums::list(&conn, 1_700_000_000).unwrap();
-    // Six built-in smart albums.
+    // Seven built-in smart albums (Today, Week, Month, Favorites, RAW, Videos,
+    // Duplicates).
     let smart = list.iter().filter(|a| a.rule.is_some()).count();
-    assert_eq!(smart, 6);
+    assert_eq!(smart, 7);
+}
+
+#[test]
+fn get_album_reports_live_count() {
+    // Regression: `albums::get` used to return `count: 0`, so an album's header
+    // (fed by get_album) showed the wrong number — notably on the Duplicates
+    // page. get() must evaluate the count the same way list() does.
+    let (_dir, db) = temp_db();
+    let conn = db.get().unwrap();
+    let now = 1_700_000_000;
+
+    // Two photos share a hash (a duplicate pair); a third is unique.
+    let mut a = sample_photo("id-1", "/photos/a.jpg", "a.jpg");
+    a.hash = Some("dup".into());
+    let mut b = sample_photo("id-2", "/photos/b.jpg", "b.jpg");
+    b.hash = Some("dup".into());
+    let mut c = sample_photo("id-3", "/photos/c.jpg", "c.jpg");
+    c.hash = Some("unique".into());
+    photos::upsert(&conn, &a).unwrap();
+    photos::upsert(&conn, &b).unwrap();
+    photos::upsert(&conn, &c).unwrap();
+
+    // Smart album: Duplicates. get()'s count must match list()'s and equal 2.
+    let list = albums::list(&conn, now).unwrap();
+    let dup = list
+        .iter()
+        .find(|al| albums::preset_of(al) == Some("duplicates"))
+        .expect("duplicates album seeded");
+    assert_eq!(dup.count, 2, "list() duplicates count");
+    let dup_get = albums::get(&conn, &dup.id, now).unwrap();
+    assert_eq!(dup_get.count, 2, "get() duplicates count");
+
+    // Manual album: get()'s count reflects membership, not 0.
+    let manual = albums::create(&conn, "Trip", None, now).unwrap();
+    albums::add_photos(&conn, &manual.id, &["id-3".into()], now).unwrap();
+    let manual_get = albums::get(&conn, &manual.id, now).unwrap();
+    assert_eq!(manual_get.count, 1, "get() manual count");
 }
 
 #[test]

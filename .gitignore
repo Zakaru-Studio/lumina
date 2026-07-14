@@ -12,6 +12,11 @@ dist-ssr
 src-tauri/target
 src-tauri/gen
 
+# Release signing secrets — NEVER commit. Holds the updater private-key path
+# and password used by scripts/release.mjs. See README "Releasing".
+.env.release
+*.key
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
@@ -33,3 +38,9 @@ pnpm-debug.log*
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code — local, machine-specific settings (shared config is committed)
+.claude/settings.local.json
+
+# Ad-hoc debug / repro scratch files
+repro.html

@@ -38,4 +38,9 @@ impl ThumbCache {
     pub fn invalidate(&self, id: &str) {
         self.inner.lock().pop(id);
     }
+
+    /// Empty the cache (e.g. before regenerating every thumbnail).
+    pub fn clear(&self) {
+        self.inner.lock().clear();
+    }
 }

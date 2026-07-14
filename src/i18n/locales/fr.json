@@ -1,0 +1,407 @@
+{
+  "common": {
+    "add": "Ajouter",
+    "remove": "Retirer",
+    "delete": "Supprimer",
+    "restore": "Restaurer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "close": "Fermer",
+    "rename": "Renommer",
+    "create": "Créer",
+    "edit": "Modifier",
+    "done": "Terminé",
+    "apply": "Appliquer",
+    "reset": "Réinitialiser",
+    "confirm": "Confirmer",
+    "loading": "Chargement…",
+    "back": "Retour",
+    "change": "Changer…"
+  },
+  "nav": {
+    "library": "Bibliothèque",
+    "timeline": "Chronologie",
+    "map": "Carte",
+    "search": "Recherche",
+    "albums": "Albums",
+    "settings": "Réglages"
+  },
+  "gallery": {
+    "deleteTitle_one": "Supprimer {{count}} photo ?",
+    "deleteTitle_other": "Supprimer {{count}} photos ?",
+    "deleteQuestion": "Choisissez le mode de suppression. Cela concerne les médias sélectionnés.",
+    "removeFromLibrary": "Retirer de la bibliothèque",
+    "removeFromLibraryHint": "Les retire de Lumina mais conserve les fichiers originaux sur le disque. Réversible.",
+    "deleteFromDisk": "Supprimer du disque",
+    "deleteFromDiskHint": "Déplace les fichiers originaux vers la corbeille de votre ordinateur. Vous pouvez les restaurer depuis celle-ci.",
+    "revealError": "Impossible d'afficher le fichier dans l'Explorateur",
+    "selectPhoto": "Sélectionner la photo",
+    "deselectPhoto": "Désélectionner la photo",
+    "edit": "Modifier…",
+    "rating": "Note",
+    "noRating": "Aucune note",
+    "favorite": "Ajouter aux favoris",
+    "unfavorite": "Retirer des favoris",
+    "addToAlbum": "Ajouter à l'album",
+    "noAlbumsYet": "Aucun album",
+    "removeFromNamedAlbum": "Retirer de « {{album}} »",
+    "removeFromAlbum": "Retirer de l'album",
+    "revealInExplorer": "Afficher dans l'Explorateur",
+    "removeFromCatalog": "Retirer du catalogue",
+    "dontAskAgain": "Ne plus demander"
+  },
+  "settings": {
+    "appearance": {
+      "title": "Apparence",
+      "description": "Thème et langue.",
+      "theme": "Thème",
+      "themeLight": "Clair",
+      "themeDark": "Sombre",
+      "themeSystem": "Système",
+      "language": "Langue"
+    },
+    "deletion": {
+      "title": "Suppression",
+      "description": "Ce qui se passe lorsque vous supprimez des médias.",
+      "behavior": "Lors d'une suppression",
+      "ask": "Demander à chaque fois",
+      "library": "Retirer de la bibliothèque",
+      "disk": "Supprimer du disque"
+    },
+    "thumbnails": {
+      "title": "Miniatures",
+      "description": "Comment les aperçus sont générés et mis en cache.",
+      "size": "Taille des miniatures",
+      "sizeHint": "{{size}} px",
+      "cacheLocation": "Emplacement du cache",
+      "cacheDefault": "Emplacement par défaut",
+      "rebuild": "Reconstruire la bibliothèque",
+      "rebuildHint": "Réindexer et régénérer toutes les miniatures.",
+      "rebuildAction": "Reconstruire",
+      "regenerating": "Régénération des miniatures…"
+    },
+    "performance": {
+      "title": "Performances",
+      "description": "Traitement en arrière-plan.",
+      "workers": "Threads de traitement",
+      "workersAuto": "Auto",
+      "workersCount": "{{n}} threads"
+    },
+    "folders": {
+      "title": "Dossiers surveillés",
+      "description": "Dossiers que Lumina indexe et surveille.",
+      "empty": "Aucun dossier pour l'instant.",
+      "removeAria": "Retirer le dossier",
+      "add": "Ajouter un dossier…"
+    },
+    "library": {
+      "title": "Bibliothèque",
+      "description": "En un coup d'œil.",
+      "photos": "Photos",
+      "favorites": "Favoris",
+      "raw": "RAW",
+      "videos": "Vidéos",
+      "pendingThumbs": "Miniatures en attente",
+      "tags": "Tags"
+    },
+    "ai": {
+      "title": "Intelligence",
+      "comingSoon": "Bientôt disponible",
+      "description": "Fonctions d'IA sur l'appareil, prévues pour une version future.",
+      "faceTitle": "Reconnaissance des visages",
+      "faceDescription": "Regroupez les photos selon les personnes présentes, calculé localement.",
+      "nlSearchTitle": "Recherche en langage naturel",
+      "nlSearchDescription": "Trouvez des photos par description grâce aux embeddings CLIP.",
+      "ocrTitle": "Texte dans les images (OCR)",
+      "ocrDescription": "Recherchez des mots qui apparaissent dans vos photos."
+    },
+    "about": {
+      "title": "À propos",
+      "description": "Version et mises à jour.",
+      "version": "Version"
+    }
+  },
+  "updater": {
+    "title": "Mise à jour disponible",
+    "available": "Une nouvelle version ({{version}}) est disponible.",
+    "install": "Installer et redémarrer",
+    "later": "Plus tard",
+    "downloading": "Téléchargement…",
+    "upToDate": "Lumina est à jour.",
+    "checkFailed": "Impossible de vérifier les mises à jour.",
+    "checkForUpdates": "Rechercher les mises à jour"
+  },
+  "shell": {
+    "smartAlbums": "Albums intelligents",
+    "myAlbums": "Mes albums",
+    "createAlbum": "Nouvel album",
+    "moveToRoot": "Déplacer à la racine",
+    "tags": "Tags",
+    "importFolders": "Importer des dossiers",
+    "renameAlbum": "Renommer",
+    "deleteAlbum": "Supprimer",
+    "toggleSidebar": "Afficher/masquer la barre latérale",
+    "searchPill": "Rechercher…",
+    "selectedCount": "{{n}} sélectionné(s)"
+  },
+  "importDialog": {
+    "title": "Importer en albums",
+    "description": "Un album sera créé pour le dossier et chaque sous-dossier (jusqu'à 3 niveaux).",
+    "rootNameLabel": "Nom de l'album racine",
+    "createAlbums": "Créer les albums",
+    "importOnly": "Importer seulement",
+    "loading": "Analyse des dossiers…",
+    "createdToast": "Albums créés",
+    "mediaCount_one": "{{count}} média",
+    "mediaCount_other": "{{count}} médias"
+  },
+  "command": {
+    "placeholder": "Rechercher des photos ou naviguer…",
+    "empty": "Aucun résultat.",
+    "goTo": "Aller à",
+    "importFolders": "Importer des dossiers…",
+    "photos": "Photos"
+  },
+  "scan": {
+    "phase": {
+      "discovering": "Découverte",
+      "indexing": "Indexation",
+      "thumbnailing": "Génération des miniatures",
+      "idle": "Inactif"
+    },
+    "etaSeconds": "il reste ~{{s}} s",
+    "etaMinutes": "il reste ~{{m}} min {{s}} s",
+    "foundCount": "{{n}} trouvés"
+  },
+  "filters": {
+    "sort": {
+      "takenAt": "Date de prise de vue",
+      "importedAt": "Importé",
+      "filename": "Nom",
+      "rating": "Note",
+      "fileSize": "Taille"
+    },
+    "ascending": "Croissant",
+    "descending": "Décroissant",
+    "favorites": "Favoris",
+    "raw": "RAW",
+    "clear": "Effacer",
+    "gridSize": "Taille de la grille"
+  },
+  "smartAlbums": {
+    "today": "Aujourd'hui",
+    "week": "Cette semaine",
+    "month": "Ce mois-ci",
+    "favorites": "Favoris",
+    "raw": "RAW",
+    "videos": "Vidéos",
+    "duplicates": "Doublons"
+  },
+  "selection": {
+    "count": "{{n}} sélectionné(s)",
+    "addToFavorites": "Ajouter aux favoris",
+    "favorite": "Favori",
+    "album": "Album",
+    "addToAlbum": "Ajouter à l'album",
+    "newAlbum": "Nouvel album…",
+    "newAlbumTitle_one": "Nouvel album à partir de {{count}} photo",
+    "newAlbumTitle_other": "Nouvel album à partir de {{count}} photos",
+    "albumNamePlaceholder": "Nom de l'album",
+    "createAndAdd": "Créer et ajouter",
+    "removeFromThisAlbum": "Retirer de cet album",
+    "removeFromAlbum": "Retirer de l'album",
+    "removeFromCatalog": "Retirer du catalogue",
+    "setDate": "Modifier la date…",
+    "clearSelection": "Effacer la sélection"
+  },
+  "dateEditor": {
+    "title_one": "Modifier la date de prise de vue",
+    "title_other": "Modifier la date de prise de vue de {{count}} photos"
+  },
+  "lightbox": {
+    "previous": "Précédent",
+    "next": "Suivant",
+    "zoomOut": "Zoom arrière",
+    "zoomIn": "Zoom avant",
+    "fitToScreen": "Ajuster à l'écran",
+    "filmstrip": "Pellicule",
+    "photo": "Photo",
+    "rating": "Note",
+    "favorite": "Favori",
+    "toggleFavorite": "Activer/désactiver le favori",
+    "tags": "Mots-clés",
+    "noTags": "Aucun mot-clé",
+    "addTagPlaceholder": "Ajouter un mot-clé…",
+    "exposure": "Exposition",
+    "taken": "Prise de vue",
+    "editDate": "Cliquer pour modifier la date de prise de vue",
+    "editDateUnsupported": "Modification de la date indisponible pour ce format (RAW/vidéo)",
+    "dimensions": "Dimensions",
+    "size": "Taille",
+    "folder": "Dossier"
+  },
+  "editor": {
+    "editing": "Édition…",
+    "saveToOriginal": "Enregistrer sur l’original",
+    "saveCopy": "Enregistrer une copie",
+    "saving": "Enregistrement…",
+    "closeEditor": "Fermer l’éditeur",
+    "overwriteTitle": "Écraser l’original ?",
+    "overwriteDescription": "Ceci remplace {{filename}} sur le disque par votre version modifiée. Les pixels d’origine ne pourront pas être récupérés. Les notes, libellés, tags et l’appartenance aux albums sont conservés. Préférez « Enregistrer une copie » en cas de doute.",
+    "overwriteOriginal": "Écraser l’original",
+    "loadError": "Impossible de charger l’image",
+    "savedCopy": "Copie enregistrée",
+    "reveal": "Afficher",
+    "saveCopyError": "Impossible d’enregistrer la copie",
+    "savedToOriginal": "Enregistré sur l’original",
+    "overwriteError": "Impossible d’écraser l’original",
+    "adjust": "Ajuster",
+    "crop": "Recadrer",
+    "transform": "Transformer",
+    "exposure": "Exposition",
+    "brightness": "Luminosité",
+    "contrast": "Contraste",
+    "saturation": "Saturation",
+    "vibrance": "Vibrance",
+    "warmth": "Chaleur",
+    "clarity": "Clarté",
+    "sharpness": "Netteté",
+    "vignette": "Vignettage",
+    "resetAll": "Tout réinitialiser",
+    "aspectRatio": "Format",
+    "aspectFree": "Libre",
+    "aspectSquare": "1:1 Carré",
+    "aspect43": "4:3",
+    "aspect32": "3:2",
+    "aspect169": "16:9",
+    "aspectOriginal": "Original",
+    "cropHint": "Faites glisser le rectangle ou ses coins sur l’image pour définir le recadrage.",
+    "resetCrop": "Réinitialiser le recadrage",
+    "rotate": "Pivoter",
+    "left": "Gauche",
+    "right": "Droite",
+    "flip": "Retourner",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
+    "straighten": "Redresser",
+    "resize": "Redimensionner",
+    "lockAspect": "Verrouiller les proportions",
+    "width": "Largeur",
+    "height": "Hauteur",
+    "outputSize": "Sortie {{width}} × {{height}} px",
+    "doubleClickReset": "Double-cliquez pour réinitialiser"
+  },
+  "mapView": {
+    "zoomOut": "Dézoomer",
+    "zoomIn": "Zoomer",
+    "resetView": "Réinitialiser la vue",
+    "photosHere": "{{n}} photos ici"
+  },
+  "rating": {
+    "label": "Note",
+    "stars_one": "{{count}} étoile",
+    "stars_other": "{{count}} étoiles"
+  },
+  "themeToggle": {
+    "light": "Clair",
+    "dark": "Sombre",
+    "system": "Système",
+    "label": "Thème : {{name}}"
+  },
+  "libraryPage": {
+    "noMatches": {
+      "title": "Aucun résultat",
+      "description": "Aucune photo ne correspond aux filtres actuels. Essayez de les assouplir ou de les réinitialiser."
+    },
+    "empty": {
+      "title": "Votre bibliothèque est vide",
+      "description": "Importez un dossier de photos pour commencer. Lumina indexe vos fichiers sur place, sans jamais déplacer ni modifier les originaux."
+    },
+    "importFolders": "Importer des dossiers…"
+  },
+  "timelinePage": {
+    "empty": {
+      "title": "Rien dans le fil chronologique pour l'instant",
+      "description": "Importez des photos avec des dates de prise de vue et elles apparaîtront ici, regroupées par jour."
+    },
+    "photoCount_one": "{{count}} photo",
+    "photoCount_other": "{{count}} photos"
+  },
+  "searchPage": {
+    "searchPlaceholder": "Rechercher par nom de fichier, appareil, tag…",
+    "filters": "Filtres",
+    "minRating": "Note min.",
+    "favorites": "Favoris",
+    "rawOnly": "RAW uniquement",
+    "camera": "Appareil",
+    "lens": "Objectif",
+    "ascending": "Croissant",
+    "descending": "Décroissant",
+    "sort": {
+      "label": "Trier",
+      "takenAt": "Date de prise de vue",
+      "importedAt": "Date d'import",
+      "filename": "Nom",
+      "rating": "Note",
+      "fileSize": "Taille"
+    },
+    "resultCount_one": "{{formattedCount}} résultat",
+    "resultCount_other": "{{formattedCount}} résultats",
+    "prompt": {
+      "title": "Rechercher dans votre bibliothèque",
+      "description": "Commencez à taper ou appliquez un filtre pour trouver des photos dans tout votre catalogue."
+    },
+    "noMatches": {
+      "title": "Aucun résultat",
+      "description": "Essayez d'assouplir vos filtres ou un autre terme de recherche."
+    }
+  },
+  "albumsPage": {
+    "smartAlbums": "Albums intelligents",
+    "smartBadge": "Intelligent",
+    "myAlbums": "Mes albums",
+    "photoCount_one": "{{count}} photo",
+    "photoCount_other": "{{count}} photos",
+    "albumActions": "Actions de l'album",
+    "deleteConfirm": "Supprimer l'album « {{name}} » ?",
+    "newAlbum": "Nouvel album",
+    "newAlbumTitle": "Nouvel album",
+    "renameAlbumTitle": "Renommer l'album",
+    "albumNamePlaceholder": "Nom de l'album",
+    "parentLabel": "Album parent",
+    "noParent": "— Aucun —"
+  },
+  "albumDetailPage": {
+    "backToAlbums": "Retour aux albums",
+    "photoCount_one": "{{count}} photo",
+    "photoCount_other": "{{count}} photos",
+    "renameAlbum": "Renommer l'album",
+    "deleteAlbum": "Supprimer l'album",
+    "deleteConfirm": "Supprimer l'album « {{name}} » ?",
+    "empty": {
+      "title": "Cet album est vide",
+      "manualDescription": "Glissez des photos sur cet album dans la barre latérale, ou utilisez la barre de sélection pour en ajouter.",
+      "smartDescription": "Aucune photo ne correspond encore aux règles de cet album intelligent."
+    },
+    "renameAlbumTitle": "Renommer l'album",
+    "albumNamePlaceholder": "Nom de l'album",
+    "subAlbums": "Sous-albums"
+  },
+  "mapPage": {
+    "empty": {
+      "title": "Aucun lieu à afficher pour l'instant",
+      "description": "Les photos comportant des coordonnées GPS dans leurs métadonnées apparaîtront ici sur la carte. Importez des photos géolocalisées pour la remplir."
+    },
+    "photosHere_one": "{{count}} photo ici",
+    "photosHere_other": "{{count}} photos ici",
+    "loadingPlaces": "Chargement des lieux…",
+    "geotaggedCount_one": "{{formattedCount}} photo géolocalisée",
+    "geotaggedCount_other": "{{formattedCount}} photos géolocalisées",
+    "compass": {
+      "north": "N",
+      "south": "S",
+      "east": "E",
+      "west": "O"
+    }
+  }
+}

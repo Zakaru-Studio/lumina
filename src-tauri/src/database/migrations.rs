@@ -11,7 +11,12 @@ use crate::core::error::Result;
 
 /// Ordered list of `(version, sql)` migrations. Append new tuples; never edit
 /// or reorder existing ones.
-const MIGRATIONS: &[(i64, &str)] = &[(1, include_str!("../../migrations/0001_initial.sql"))];
+const MIGRATIONS: &[(i64, &str)] = &[
+    (1, include_str!("../../migrations/0001_initial.sql")),
+    (2, include_str!("../../migrations/0002_gps_index.sql")),
+    (3, include_str!("../../migrations/0003_album_hierarchy.sql")),
+    (4, include_str!("../../migrations/0004_date_override.sql")),
+];
 
 /// Apply all pending migrations to `conn`.
 pub fn run(conn: &Connection) -> Result<()> {

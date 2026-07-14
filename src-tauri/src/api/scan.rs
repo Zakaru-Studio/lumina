@@ -51,6 +51,27 @@ pub async fn rescan_library(state: State<'_, SharedState>) -> Result<()> {
     .await
 }
 
+/// Regenerate every thumbnail at the current configured size. Clears the grid
+/// thumbnail cache, then re-runs the pipeline (which rebuilds the missing
+/// thumbnails). Progress is delivered via the usual scan events.
+#[tauri::command]
+pub async fn regenerate_thumbnails(state: State<'_, SharedState>) -> Result<()> {
+    let state = Arc::clone(&state);
+    blocking(move || {
+        let conn = state.db.get()?;
+        let roots: Vec<PathBuf> = folders::list(&conn)?
+            .into_iter()
+            .filter(|f| f.active)
+            .map(|f| PathBuf::from(f.path))
+            .collect();
+        if !roots.is_empty() {
+            state.scanner.spawn_regenerate_thumbnails(roots);
+        }
+        Ok(())
+    })
+    .await
+}
+
 /// Current scan progress (for late-subscribing UIs / initial render).
 #[tauri::command]
 pub async fn scan_progress(state: State<'_, SharedState>) -> Result<ScanProgress> {
@@ -99,7 +120,7 @@ pub async fn remove_watched_folder(state: State<'_, SharedState>, id: String) ->
 }
 
 /// (Re)install the filesystem watcher over all active roots.
-fn install_watcher(state: &SharedState, conn: &crate::database::Conn) -> Result<()> {
+pub(crate) fn install_watcher(state: &SharedState, conn: &crate::database::Conn) -> Result<()> {
     let roots: Vec<PathBuf> = folders::list(conn)?
         .into_iter()
         .filter(|f| f.active)

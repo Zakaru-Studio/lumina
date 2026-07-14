@@ -1,0 +1,407 @@
+{
+  "common": {
+    "add": "Add",
+    "remove": "Remove",
+    "delete": "Delete",
+    "restore": "Restore",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close",
+    "rename": "Rename",
+    "create": "Create",
+    "edit": "Edit",
+    "done": "Done",
+    "apply": "Apply",
+    "reset": "Reset",
+    "confirm": "Confirm",
+    "loading": "Loading…",
+    "back": "Back",
+    "change": "Change…"
+  },
+  "nav": {
+    "library": "Library",
+    "timeline": "Timeline",
+    "map": "Map",
+    "search": "Search",
+    "albums": "Albums",
+    "settings": "Settings"
+  },
+  "gallery": {
+    "deleteTitle_one": "Delete {{count}} photo?",
+    "deleteTitle_other": "Delete {{count}} photos?",
+    "deleteQuestion": "Choose how to delete. This affects the selected media.",
+    "removeFromLibrary": "Remove from library",
+    "removeFromLibraryHint": "Removes them from Lumina but keeps the original files on disk. This can be undone.",
+    "deleteFromDisk": "Delete from disk",
+    "deleteFromDiskHint": "Moves the original files to your computer's trash / Recycle Bin. You can restore them from there.",
+    "revealError": "Could not reveal file in Explorer",
+    "selectPhoto": "Select photo",
+    "deselectPhoto": "Deselect photo",
+    "edit": "Edit…",
+    "rating": "Rating",
+    "noRating": "No rating",
+    "favorite": "Favorite",
+    "unfavorite": "Unfavorite",
+    "addToAlbum": "Add to album",
+    "noAlbumsYet": "No albums yet",
+    "removeFromNamedAlbum": "Remove from “{{album}}”",
+    "removeFromAlbum": "Remove from album",
+    "revealInExplorer": "Reveal in Explorer",
+    "removeFromCatalog": "Remove from catalog",
+    "dontAskAgain": "Don't ask again"
+  },
+  "settings": {
+    "appearance": {
+      "title": "Appearance",
+      "description": "Theme and language.",
+      "theme": "Theme",
+      "themeLight": "Light",
+      "themeDark": "Dark",
+      "themeSystem": "System",
+      "language": "Language"
+    },
+    "deletion": {
+      "title": "Deletion",
+      "description": "What happens when you delete media.",
+      "behavior": "When deleting",
+      "ask": "Ask every time",
+      "library": "Remove from library",
+      "disk": "Delete from disk"
+    },
+    "thumbnails": {
+      "title": "Thumbnails",
+      "description": "How previews are generated and cached.",
+      "size": "Thumbnail size",
+      "sizeHint": "{{size}} px",
+      "cacheLocation": "Cache location",
+      "cacheDefault": "Default location",
+      "rebuild": "Rebuild library",
+      "rebuildHint": "Re-index and regenerate all thumbnails.",
+      "rebuildAction": "Rebuild",
+      "regenerating": "Regenerating thumbnails…"
+    },
+    "performance": {
+      "title": "Performance",
+      "description": "Background processing.",
+      "workers": "Worker threads",
+      "workersAuto": "Auto",
+      "workersCount": "{{n}} threads"
+    },
+    "folders": {
+      "title": "Watched Folders",
+      "description": "Folders Lumina indexes and monitors.",
+      "empty": "No folders yet.",
+      "removeAria": "Remove folder",
+      "add": "Add folder…"
+    },
+    "library": {
+      "title": "Library",
+      "description": "At a glance.",
+      "photos": "Photos",
+      "favorites": "Favorites",
+      "raw": "RAW",
+      "videos": "Videos",
+      "pendingThumbs": "Pending thumbs",
+      "tags": "Tags"
+    },
+    "ai": {
+      "title": "Intelligence",
+      "comingSoon": "Coming soon",
+      "description": "On-device AI features, planned for a future release.",
+      "faceTitle": "Face recognition",
+      "faceDescription": "Group photos by the people in them, computed locally.",
+      "nlSearchTitle": "Natural-language search",
+      "nlSearchDescription": "Find photos by description using CLIP embeddings.",
+      "ocrTitle": "Text in images (OCR)",
+      "ocrDescription": "Search for words that appear inside your photos."
+    },
+    "about": {
+      "title": "About",
+      "description": "Version and updates.",
+      "version": "Version"
+    }
+  },
+  "updater": {
+    "title": "Update available",
+    "available": "A new version ({{version}}) is available.",
+    "install": "Install and restart",
+    "later": "Later",
+    "downloading": "Downloading…",
+    "upToDate": "Lumina is up to date.",
+    "checkFailed": "Could not check for updates.",
+    "checkForUpdates": "Check for updates"
+  },
+  "shell": {
+    "smartAlbums": "Smart Albums",
+    "myAlbums": "My Albums",
+    "createAlbum": "New album",
+    "moveToRoot": "Move to root",
+    "tags": "Tags",
+    "importFolders": "Import folders",
+    "renameAlbum": "Rename",
+    "deleteAlbum": "Delete",
+    "toggleSidebar": "Toggle sidebar",
+    "searchPill": "Search…",
+    "selectedCount": "{{n}} selected"
+  },
+  "importDialog": {
+    "title": "Import as albums",
+    "description": "An album will be created for the folder and each sub-folder (up to 3 levels).",
+    "rootNameLabel": "Root album name",
+    "createAlbums": "Create albums",
+    "importOnly": "Import only",
+    "loading": "Analyzing folders…",
+    "createdToast": "Albums created",
+    "mediaCount_one": "{{count}} item",
+    "mediaCount_other": "{{count}} items"
+  },
+  "command": {
+    "placeholder": "Search photos or jump to…",
+    "empty": "No results found.",
+    "goTo": "Go to",
+    "importFolders": "Import folders…",
+    "photos": "Photos"
+  },
+  "scan": {
+    "phase": {
+      "discovering": "Discovering",
+      "indexing": "Indexing",
+      "thumbnailing": "Generating thumbnails",
+      "idle": "Idle"
+    },
+    "etaSeconds": "~{{s}}s left",
+    "etaMinutes": "~{{m}}m {{s}}s left",
+    "foundCount": "{{n}} found"
+  },
+  "filters": {
+    "sort": {
+      "takenAt": "Date taken",
+      "importedAt": "Imported",
+      "filename": "Name",
+      "rating": "Rating",
+      "fileSize": "Size"
+    },
+    "ascending": "Ascending",
+    "descending": "Descending",
+    "favorites": "Favorites",
+    "raw": "RAW",
+    "clear": "Clear",
+    "gridSize": "Grid size"
+  },
+  "smartAlbums": {
+    "today": "Today",
+    "week": "This Week",
+    "month": "This Month",
+    "favorites": "Favorites",
+    "raw": "RAW",
+    "videos": "Videos",
+    "duplicates": "Duplicates"
+  },
+  "selection": {
+    "count": "{{n}} selected",
+    "addToFavorites": "Add to favorites",
+    "favorite": "Favorite",
+    "album": "Album",
+    "addToAlbum": "Add to album",
+    "newAlbum": "New album…",
+    "newAlbumTitle_one": "New album from {{count}} photo",
+    "newAlbumTitle_other": "New album from {{count}} photos",
+    "albumNamePlaceholder": "Album name",
+    "createAndAdd": "Create & add",
+    "removeFromThisAlbum": "Remove from this album",
+    "removeFromAlbum": "Remove from album",
+    "removeFromCatalog": "Remove from catalog",
+    "setDate": "Set date…",
+    "clearSelection": "Clear selection"
+  },
+  "dateEditor": {
+    "title_one": "Set capture date",
+    "title_other": "Set capture date for {{count}} photos"
+  },
+  "lightbox": {
+    "previous": "Previous",
+    "next": "Next",
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "fitToScreen": "Fit to screen",
+    "filmstrip": "Filmstrip",
+    "photo": "Photo",
+    "rating": "Rating",
+    "favorite": "Favorite",
+    "toggleFavorite": "Toggle favorite",
+    "tags": "Tags",
+    "noTags": "No tags",
+    "addTagPlaceholder": "Add a tag…",
+    "exposure": "Exposure",
+    "taken": "Taken",
+    "editDate": "Click to edit the capture date",
+    "editDateUnsupported": "Date editing isn't available for this format (RAW/video)",
+    "dimensions": "Dimensions",
+    "size": "Size",
+    "folder": "Folder"
+  },
+  "editor": {
+    "editing": "Editing…",
+    "saveToOriginal": "Save to original",
+    "saveCopy": "Save a copy",
+    "saving": "Saving…",
+    "closeEditor": "Close editor",
+    "overwriteTitle": "Overwrite the original?",
+    "overwriteDescription": "This replaces {{filename}} on disk with your edited version. The original pixels can’t be recovered. Ratings, labels, tags and album membership are kept. Prefer “Save a copy” if you’re unsure.",
+    "overwriteOriginal": "Overwrite original",
+    "loadError": "Could not load image",
+    "savedCopy": "Saved a copy",
+    "reveal": "Reveal",
+    "saveCopyError": "Could not save the copy",
+    "savedToOriginal": "Saved to original",
+    "overwriteError": "Could not overwrite the original",
+    "adjust": "Adjust",
+    "crop": "Crop",
+    "transform": "Transform",
+    "exposure": "Exposure",
+    "brightness": "Brightness",
+    "contrast": "Contrast",
+    "saturation": "Saturation",
+    "vibrance": "Vibrance",
+    "warmth": "Warmth",
+    "clarity": "Clarity",
+    "sharpness": "Sharpness",
+    "vignette": "Vignette",
+    "resetAll": "Reset all",
+    "aspectRatio": "Aspect ratio",
+    "aspectFree": "Free",
+    "aspectSquare": "1:1 Square",
+    "aspect43": "4:3",
+    "aspect32": "3:2",
+    "aspect169": "16:9",
+    "aspectOriginal": "Original",
+    "cropHint": "Drag the rectangle or its corners on the image to set the crop.",
+    "resetCrop": "Reset crop",
+    "rotate": "Rotate",
+    "left": "Left",
+    "right": "Right",
+    "flip": "Flip",
+    "horizontal": "Horizontal",
+    "vertical": "Vertical",
+    "straighten": "Straighten",
+    "resize": "Resize",
+    "lockAspect": "Lock aspect",
+    "width": "Width",
+    "height": "Height",
+    "outputSize": "Output {{width}} × {{height}} px",
+    "doubleClickReset": "Double-click to reset"
+  },
+  "mapView": {
+    "zoomOut": "Zoom out",
+    "zoomIn": "Zoom in",
+    "resetView": "Reset view",
+    "photosHere": "{{n}} photos here"
+  },
+  "rating": {
+    "label": "Rating",
+    "stars_one": "{{count}} star",
+    "stars_other": "{{count}} stars"
+  },
+  "themeToggle": {
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System",
+    "label": "Theme: {{name}}"
+  },
+  "libraryPage": {
+    "noMatches": {
+      "title": "No matches",
+      "description": "No photos match the current filters. Try loosening or clearing them."
+    },
+    "empty": {
+      "title": "Your library is empty",
+      "description": "Import a folder of photos to get started. Lumina indexes your files in place and never moves or modifies the originals."
+    },
+    "importFolders": "Import folders…"
+  },
+  "timelinePage": {
+    "empty": {
+      "title": "Nothing on the timeline yet",
+      "description": "Import photos with capture dates and they'll appear here, grouped by day."
+    },
+    "photoCount_one": "{{count}} photo",
+    "photoCount_other": "{{count}} photos"
+  },
+  "searchPage": {
+    "searchPlaceholder": "Search by filename, camera, tag…",
+    "filters": "Filters",
+    "minRating": "Min rating",
+    "favorites": "Favorites",
+    "rawOnly": "RAW only",
+    "camera": "Camera",
+    "lens": "Lens",
+    "ascending": "Ascending",
+    "descending": "Descending",
+    "sort": {
+      "label": "Sort",
+      "takenAt": "Date taken",
+      "importedAt": "Imported",
+      "filename": "Name",
+      "rating": "Rating",
+      "fileSize": "Size"
+    },
+    "resultCount_one": "{{formattedCount}} result",
+    "resultCount_other": "{{formattedCount}} results",
+    "prompt": {
+      "title": "Search your library",
+      "description": "Start typing or apply a filter to find photos across your entire catalog."
+    },
+    "noMatches": {
+      "title": "No matches",
+      "description": "Try loosening your filters or a different search term."
+    }
+  },
+  "albumsPage": {
+    "smartAlbums": "Smart Albums",
+    "smartBadge": "Smart",
+    "myAlbums": "My Albums",
+    "photoCount_one": "{{count}} photo",
+    "photoCount_other": "{{count}} photos",
+    "albumActions": "Album actions",
+    "deleteConfirm": "Delete album \"{{name}}\"?",
+    "newAlbum": "New Album",
+    "newAlbumTitle": "New album",
+    "renameAlbumTitle": "Rename album",
+    "albumNamePlaceholder": "Album name",
+    "parentLabel": "Parent album",
+    "noParent": "— None —"
+  },
+  "albumDetailPage": {
+    "backToAlbums": "Back to albums",
+    "photoCount_one": "{{count}} photo",
+    "photoCount_other": "{{count}} photos",
+    "renameAlbum": "Rename album",
+    "deleteAlbum": "Delete album",
+    "deleteConfirm": "Delete album \"{{name}}\"?",
+    "empty": {
+      "title": "This album is empty",
+      "manualDescription": "Drag photos onto this album in the sidebar, or use the selection toolbar to add some.",
+      "smartDescription": "No photos match this smart album's rules yet."
+    },
+    "renameAlbumTitle": "Rename album",
+    "albumNamePlaceholder": "Album name",
+    "subAlbums": "Sub-albums"
+  },
+  "mapPage": {
+    "empty": {
+      "title": "No places to show yet",
+      "description": "Photos that carry GPS coordinates in their metadata will appear here on the map. Import geotagged photos to populate it."
+    },
+    "photosHere_one": "{{count}} photo here",
+    "photosHere_other": "{{count}} photos here",
+    "loadingPlaces": "Loading places…",
+    "geotaggedCount_one": "{{formattedCount}} geotagged photo",
+    "geotaggedCount_other": "{{formattedCount}} geotagged photos",
+    "compass": {
+      "north": "N",
+      "south": "S",
+      "east": "E",
+      "west": "W"
+    }
+  }
+}

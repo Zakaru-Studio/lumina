@@ -10,6 +10,7 @@ export const EVENTS = {
   scanDone: "scan://done",
   libraryChanged: "library://changed",
   thumbReady: "thumb://ready",
+  thumbsRegenerated: "thumb://regenerated",
 } as const;
 
 export function onScanProgress(cb: (p: ScanProgress) => void): Promise<UnlistenFn> {
@@ -22,4 +23,8 @@ export function onScanDone(cb: (s: ScanSummary) => void): Promise<UnlistenFn> {
 
 export function onLibraryChanged(cb: () => void): Promise<UnlistenFn> {
   return listen(EVENTS.libraryChanged, () => cb());
+}
+
+export function onThumbsRegenerated(cb: () => void): Promise<UnlistenFn> {
+  return listen(EVENTS.thumbsRegenerated, () => cb());
 }

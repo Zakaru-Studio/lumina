@@ -37,6 +37,12 @@
     --ring: 245 75% 60%;
 
     --radius: 0.75rem;
+
+    /* Map view — a calm, stylized cartographic palette. */
+    --map-ocean: 210 38% 96%;
+    --map-land: 220 15% 83%;
+    --map-border: 220 14% 72%;
+    --map-graticule: 220 24% 89%;
   }
 
   .dark {
@@ -67,6 +73,12 @@
     --border: 240 5% 16%;
     --input: 240 5% 18%;
     --ring: 245 80% 67%;
+
+    /* Map view — deep, muted tones for the dark theme. */
+    --map-ocean: 225 30% 9%;
+    --map-land: 225 16% 22%;
+    --map-border: 225 14% 33%;
+    --map-graticule: 225 22% 17%;
   }
 }
 
@@ -117,27 +129,22 @@
 }
 
 @layer utilities {
-  /* Color-label swatches shared across the app. */
-  .label-red {
-    color: hsl(0 72% 55%);
-  }
-  .label-yellow {
-    color: hsl(45 90% 52%);
-  }
-  .label-green {
-    color: hsl(142 60% 45%);
-  }
-  .label-blue {
-    color: hsl(215 80% 58%);
-  }
-  .label-purple {
-    color: hsl(270 70% 62%);
-  }
-
   .drag-region {
     -webkit-app-region: drag;
   }
   .no-drag {
     -webkit-app-region: no-drag;
+  }
+
+  /* Hide the native scrollbar while keeping scroll behavior (Timeline uses the
+     custom scrubber as its visible scroll control). */
+  .no-scrollbar {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* legacy Edge */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
   }
 }

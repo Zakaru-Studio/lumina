@@ -6,6 +6,7 @@
 //! via `State<'_, SharedState>`.
 
 pub mod albums;
+pub mod import;
 pub mod photos;
 pub mod scan;
 pub mod settings;
