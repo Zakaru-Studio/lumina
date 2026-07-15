@@ -1,0 +1,73 @@
+# Builds a macOS universal .dmg on a real macOS runner.
+#
+# Why CI: Tauri cannot cross-compile macOS from Windows (it needs Apple's SDK,
+# toolchain and WebKit frameworks), so the Windows dev box can't produce this.
+#
+# UNSIGNED / NOT NOTARIZED: there is no Apple Developer ID certificate yet, so
+# Gatekeeper WILL block the app on other machines ("Lumina is damaged"). Users
+# must right-click → Open, or run:
+#     xattr -dr com.apple.quarantine /Applications/Lumina.app
+# A distributable Mac build needs an Apple Developer account ($99/yr), a
+# "Developer ID Application" cert and notarization — then this workflow gains
+# APPLE_* secrets and drops the caveat.
+#
+# This build is deliberately NOT an updater source: the self-hosted latest.json
+# stays Windows-only, so no Mac client is ever offered an unopenable update.
+name: macOS build (unsigned)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to attach the .dmg to (e.g. v0.3.0). Empty = keep it as a build artifact only."
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # `createUpdaterArtifacts` is true in tauri.conf.json and would demand the
+      # updater signing key; override it off here (see the note above — this is
+      # not an updater source, and the private key stays off CI).
+      - name: Build unsigned universal .dmg
+        run: |
+          npm run tauri -- build --target universal-apple-darwin --bundles dmg \
+            --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Locate the .dmg
+        id: dmg
+        run: |
+          path="$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+          echo "Built: $path"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumina-macos-universal-dmg
+          path: ${{ steps.dmg.outputs.path }}
+          if-no-files-found: error
+
+      - name: Attach the .dmg to the release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release_tag }}" "${{ steps.dmg.outputs.path }}" --clobber
