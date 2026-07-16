@@ -1,0 +1,55 @@
+name: macOS build (unsigned)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to attach the .dmg to (e.g. v0.3.0). Empty = keep it as a build artifact only."
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Build unsigned universal .dmg
+        run: |
+          npm run tauri -- build --target universal-apple-darwin --bundles dmg \
+            --config '{"bundle":{"createUpdaterArtifacts":false}}'
+
+      - name: Locate the .dmg
+        id: dmg
+        run: |
+          path="$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)"
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+          echo "Built: $path"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumina-macos-universal-dmg
+          path: ${{ steps.dmg.outputs.path }}
+          if-no-files-found: error
+
+      - name: Attach the .dmg to the release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release_tag }}" "${{ steps.dmg.outputs.path }}" --clobber
