@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing release tag to attach the .dmg to (e.g. v0.3.0). Empty = keep it as a build artifact only."
+        description: "Existing release tag to attach the .dmg to (e.g. v0.3.0). Empty = build artifact only."
         required: false
         default: ""
 
@@ -12,42 +12,48 @@ jobs:
   build:
     runs-on: macos-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
-
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-
       - run: npm ci
-
       - name: Build unsigned universal .dmg
         run: |
           npm run tauri -- build --target universal-apple-darwin --bundles dmg \
             --config '{"bundle":{"createUpdaterArtifacts":false}}'
-
       - name: Locate the .dmg
         id: dmg
         run: |
           path="$(ls src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg | head -1)"
           echo "path=$path" >> "$GITHUB_OUTPUT"
-          echo "Built: $path"
-
       - uses: actions/upload-artifact@v4
         with:
           name: lumina-macos-universal-dmg
           path: ${{ steps.dmg.outputs.path }}
           if-no-files-found: error
-
+      - name: Publish the .dmg to the download host (zakaru.dev/lumina)
+        env:
+          SSH_KEY: ${{ secrets.LUMINA_SSH_KEY }}
+          SSH_HOST: ${{ secrets.LUMINA_SSH_HOST }}
+          SSH_USER: ${{ secrets.LUMINA_SSH_USER }}
+        run: |
+          key="$RUNNER_TEMP/deploy_key"
+          printf '%s\n' "$SSH_KEY" > "$key"
+          chmod 600 "$key"
+          scp -i "$key" -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+            -o ConnectTimeout=30 "${{ steps.dmg.outputs.path }}" \
+            "$SSH_USER@$SSH_HOST:httpdocs/lumina/"
+          echo "https://zakaru.dev/lumina/$(basename "${{ steps.dmg.outputs.path }}")"
       - name: Attach the .dmg to the release
         if: inputs.release_tag != ''
         env:
