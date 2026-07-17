@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "pack:msix": "node scripts/pack-msix.mjs"
   },
   "dependencies": {
     "@radix-ui/react-context-menu": "^2.3.3",

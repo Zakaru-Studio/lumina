@@ -50,3 +50,11 @@ Thumbs.db
 # Ad-hoc debug / repro scratch files
 repro.html
 release-dist/
+
+# MSIX packaging build artifacts + local dev signing certs (scripts/pack-msix.mjs).
+# The manifest (msix/Package.appxmanifest) and branded assets (msix/Assets/) ARE
+# committed; only the staged layout, output packages and certificates are not.
+msix/stage/
+msix/out/
+msix/*.pfx
+msix/*.cer
