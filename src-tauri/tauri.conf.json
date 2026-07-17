@@ -10,6 +10,7 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "macOSPrivateApi": true,
     "windows": [
       {
         "label": "main",
@@ -68,7 +69,12 @@
     ],
     "category": "Photography",
     "shortDescription": "Fast local-first photo library manager.",
-    "longDescription": "Lumina is a modern, local-first photo library manager: fast scanning, EXIF indexing, WebP thumbnails, virtualized browsing, timeline, smart albums and instant search."
+    "longDescription": "Lumina is a modern, local-first photo library manager: fast scanning, EXIF indexing, WebP thumbnails, virtualized browsing, timeline, smart albums and instant search.",
+    "macOS": {
+      "signingIdentity": "-",
+      "entitlements": "entitlements.plist",
+      "minimumSystemVersion": "10.15"
+    }
   },
   "plugins": {
     "updater": {
