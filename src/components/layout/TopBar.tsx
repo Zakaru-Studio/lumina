@@ -60,9 +60,9 @@ export function TopBar() {
       <button
         type="button"
         onClick={() => setCommandOpen(true)}
-        className="no-drag ml-2 flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-accent"
+        className="no-drag ml-2 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent"
       >
-        <Search className="h-4 w-4" />
+        <Search className="h-5 w-5" />
         <span>{t("shell.searchPill")}</span>
         <kbd className="ml-6 rounded bg-background/60 px-1.5 py-0.5 text-xs">
           {shortcutHint("K")}

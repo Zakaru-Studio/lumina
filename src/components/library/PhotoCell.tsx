@@ -31,7 +31,7 @@ export interface PhotoCellProps {
 
 /**
  * A single grid cell wrapping a {@link Thumbnail}. A plain click opens the photo
- * in the lightbox; selection is done via the hover checkbox (top-right) or
+ * in the lightbox; selection is done via the hover checkbox (top-left) or
  * modifier-clicks (Ctrl/Cmd to toggle, Shift for a range). Selection shows a
  * primary ring and subtle scale; favorite and rating metadata reveal on
  * hover (and stay visible when set).
@@ -73,7 +73,7 @@ export const PhotoCell = memo(function PhotoCell({
           onClick={(e) => {
             // A plain click opens the viewer directly; modifier-clicks
             // (Ctrl/Cmd toggle, Shift range) select instead. Selecting without
-            // opening is still available via the hover checkbox (top-right).
+            // opening is still available via the hover checkbox (top-left).
             if (e.shiftKey || e.ctrlKey || e.metaKey) onClick(e, photo.id);
             else onOpen(index);
           }}
@@ -82,7 +82,7 @@ export const PhotoCell = memo(function PhotoCell({
         >
           <Thumbnail photo={photo} />
 
-          {/* Selection checkbox (top-right) */}
+          {/* Selection checkbox (top-left) */}
           <button
             type="button"
             aria-label={selected ? t("gallery.deselectPhoto") : t("gallery.selectPhoto")}
@@ -97,7 +97,7 @@ export const PhotoCell = memo(function PhotoCell({
             }}
             onDoubleClick={(e) => e.stopPropagation()}
             className={cn(
-              "absolute right-1.5 top-1.5 flex h-[23px] w-[23px] items-center justify-center rounded-[5px] transition-all",
+              "absolute left-1.5 top-1.5 flex h-[23px] w-[23px] items-center justify-center rounded-[5px] transition-all",
               selected
                 ? "bg-primary text-primary-foreground shadow"
                 : "bg-black/30 text-white/90 ring-1 ring-inset ring-white/70 backdrop-blur-sm hover:bg-black/45",
@@ -107,9 +107,9 @@ export const PhotoCell = memo(function PhotoCell({
             {selected ? <Check className="h-3.5 w-3.5" /> : null}
           </button>
 
-          {/* Favorite (top-left) */}
+          {/* Favorite (top-right) */}
           {photo.isFavorite ? (
-            <div className="absolute left-1.5 top-1.5 text-red-500 drop-shadow">
+            <div className="absolute right-1.5 top-1.5 text-red-500 drop-shadow">
               <Heart className="h-4 w-4 fill-current" />
             </div>
           ) : null}

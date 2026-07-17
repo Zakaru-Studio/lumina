@@ -171,7 +171,7 @@ export function Sidebar() {
         )}
       >
         <div className="flex h-7 w-7 items-center justify-center rounded-sm bg-primary text-primary-foreground">
-          <Aperture className="h-4 w-4" />
+          <Aperture className="h-4 w-4 text-white" />
         </div>
         {!collapsed ? (
           <span className="text-base font-semibold tracking-tight text-foreground">Lumina</span>

@@ -10,6 +10,7 @@ import { reverseGeocode } from "@/components/map/geo";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useClusterPhotos, useMapPhotos, useReverseGeocode } from "@/hooks/useMapPhotos";
+import { useWindowTitle } from "@/hooks/useWindowTitle";
 import { thumbnailSrc } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import type { GeoPlace } from "@/types";
@@ -22,6 +23,9 @@ import type { GeoPlace } from "@/types";
  */
 export function MapPage() {
   const { t } = useTranslation();
+  // While the map is open, surface "Carte" / "Map" as the window title (taskbar,
+  // Alt+Tab) instead of the default "Lumina"; restored on navigating away.
+  useWindowTitle(t("nav.map"));
   const { data: points = [], isLoading } = useMapPhotos();
   const [selected, setSelected] = useState<Cluster | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
