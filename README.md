@@ -1,6 +1,6 @@
 # Lumina
 
-A fast, **local-first** modern photo library manager — a clean-room alternative to
+A fast, **local-first** modern photo library manager. Lumina is a clean-room alternative to
 digiKam / Lightroom focused on library management, speed and a calm, spacious UI.
 Everything runs on your machine. **No cloud, no telemetry, your files never leave
 your disk, and originals are never modified.**
