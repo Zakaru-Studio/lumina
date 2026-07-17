@@ -17,7 +17,10 @@
     "loading": "Loading…",
     "back": "Back",
     "change": "Change…",
-    "actions": "Actions"
+    "actions": "Actions",
+    "undo": "Undo",
+    "restored": "Restored",
+    "restoreError": "Could not restore"
   },
   "nav": {
     "library": "Library",
@@ -50,7 +53,16 @@
     "removeFromAlbum": "Remove from album",
     "revealInExplorer": "Reveal in Explorer",
     "removeFromCatalog": "Remove from catalog",
-    "dontAskAgain": "Don't ask again"
+    "dontAskAgain": "Don't ask again",
+    "deleteToast": {
+      "removedFromCatalog_one": "{{count}} photo removed from the catalog",
+      "removedFromCatalog_other": "{{count}} photos removed from the catalog",
+      "originalsUntouched": "The original files were not touched.",
+      "deletedFromDisk_one": "{{count}} photo deleted from disk",
+      "deletedFromDisk_other": "{{count}} photos deleted from disk",
+      "movedToTrash": "The original files were moved to the trash.",
+      "deleteError": "Could not delete from disk"
+    }
   },
   "settings": {
     "appearance": {
@@ -106,17 +118,16 @@
       "add": "Add folder…"
     },
     "backup": {
-      "title": "Device Backup",
-      "description": "Save photos from connected devices to an external drive.",
+      "title": "Backup",
+      "description": "Back up your library to an external drive.",
       "destination": "Backup drive",
       "destinationUnset": "Not set",
       "choose": "Choose",
       "autoPrompt": "Propose on connect",
-      "autoPromptHint": "Offer to back up when a device with photos is plugged in.",
+      "autoPromptHint": "Offer to back up when your backup drive is connected.",
       "manual": "Back up now",
-      "manualHint": "Look for a connected device and start a backup.",
-      "backupNow": "Back up a device",
-      "noDevice": "No connected device with photos was found."
+      "manualHint": "Copy new library photos to the backup drive.",
+      "backupNow": "Back up now"
     },
     "library": {
       "title": "Library",
@@ -216,13 +227,12 @@
     "confirm": "Move to Recycle Bin"
   },
   "backup": {
-    "title": "Back up {{label}}?",
-    "description_one": "This device holds {{count}} photo. New ones are copied to your backup drive; already-saved photos are skipped.",
-    "description_other": "This device holds {{count}} photos. New ones are copied to your backup drive; already-saved photos are skipped.",
+    "title": "Back up your library",
+    "description": "New photos are copied to your backup drive. Anything already backed up is skipped, and nothing on the drive is ever deleted.",
     "chooseDestination": "Choose backup drive",
     "changeDestination": "Change drive",
     "destinationLabel": "Backup drive",
-    "noDestination": "Choose the external drive where photos should be saved.",
+    "noDestination": "Choose the external drive where your library should be backed up.",
     "analyzing": "Analyzing…",
     "previewNew_one": "{{count}} new photo",
     "previewNew_other": "{{count}} new photos",
@@ -230,13 +240,18 @@
     "previewSkip_other": "{{count}} already backed up",
     "nothingNew": "Everything is already backed up.",
     "start": "Back up",
-    "skip": "Skip",
+    "skip": "Later",
+    "stop": "Stop",
+    "stopped": "Stopped",
     "copying": "Copying…",
     "copyingProgress": "Copying {{done}} / {{total}}",
     "close": "Close",
     "doneToast": "Backup complete",
-    "doneSummary_one": "{{copied}} copied · {{skipped}} skipped",
-    "doneSummary_other": "{{copied}} copied · {{skipped}} skipped"
+    "cancelledToast": "Backup stopped",
+    "errorToast": "Backup failed",
+    "doneSummary": "{{copied}} copied · {{skipped}} skipped",
+    "failedCount_one": "{{count}} failed",
+    "failedCount_other": "{{count}} failed"
   },
   "command": {
     "placeholder": "Search photos or jump to…",
@@ -500,6 +515,15 @@
     "photoCount_other": "{{count}} photos",
     "albumActions": "Album actions",
     "deleteConfirm": "Delete album \"{{name}}\"?",
+    "selectAlbum": "Select album",
+    "deselectAlbum": "Deselect album",
+    "selectedCount_one": "{{count}} selected",
+    "selectedCount_other": "{{count}} selected",
+    "deleteSelectedTitle_one": "Delete {{count}} album?",
+    "deleteSelectedTitle_other": "Delete {{count}} albums?",
+    "deleteSelectedDescription": "The selected albums will be removed. Your photos stay in your library.",
+    "deleteSelectedMirror_one": "{{count}} of the selected albums is a mirror album — its folder and everything inside will be moved to the Recycle Bin. This can't be undone.",
+    "deleteSelectedMirror_other": "{{count}} of the selected albums are mirror albums — their folders and everything inside will be moved to the Recycle Bin. This can't be undone.",
     "newAlbum": "New Album",
     "newAlbumTitle": "New album",
     "renameAlbumTitle": "Rename album",
@@ -556,7 +580,12 @@
     "modeTrashHint": "Duplicate files are moved to the system trash. Frees disk space.",
     "working": "Working…",
     "confirm": "Remove {{count}} copy(ies)",
-    "selectionAction": "Deduplicate selection"
+    "selectionAction": "Deduplicate selection",
+    "deduplicated_one": "Deduplicated {{count}} copy",
+    "deduplicated_other": "Deduplicated {{count}} copies",
+    "removedFromCatalog": "Removed from the catalog; the files were not touched.",
+    "movedToTrash": "Duplicate files were moved to the trash.",
+    "error": "Could not deduplicate"
   },
   "people": {
     "disabledTitle": "Face recognition is off",

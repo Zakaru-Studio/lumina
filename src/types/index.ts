@@ -321,10 +321,13 @@ export interface DeviceInfo {
   mediaCount: number;
 }
 
-/** Fast preview of what a device backup would copy vs skip. */
+/** Fast preview of what a library backup would copy vs skip. */
 export interface BackupPreview {
+  /** Live photos whose content isn't on the drive yet (would be copied). */
   toCopy: number;
+  /** Live photos already archived on the drive (would be skipped). */
   toSkip: number;
+  /** Total bytes of the files that would be copied. */
   bytes: number;
 }
 
@@ -338,13 +341,18 @@ export interface BackupProgress {
   current: string | null;
 }
 
-/** Summary emitted when a backup run completes. */
+/** Summary emitted when a backup run completes (or stops early). */
 export interface BackupSummary {
   copied: number;
   skipped: number;
+  /** Files that could not be read/copied/verified. */
   failed: number;
   bytesCopied: number;
   durationMs: number;
+  /** True when the user stopped the run before it finished. */
+  cancelled: boolean;
+  /** Set when the run aborted before copying (e.g. catalog unreadable). */
+  error: string | null;
 }
 
 /** Serialized backend error (`core::error::ApiError`). */

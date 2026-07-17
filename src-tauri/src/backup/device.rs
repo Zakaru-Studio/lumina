@@ -42,7 +42,7 @@ mod windows_impl {
     use std::ffi::OsStr;
     use std::iter::once;
     use std::os::windows::ffi::OsStrExt;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use std::time::Duration;
 
@@ -54,6 +54,7 @@ mod windows_impl {
         GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW,
     };
 
+    use crate::backup::manifest::DriveMarker;
     use crate::backup::scan;
     use crate::core::config::AppConfig;
     use crate::events::{self, DeviceInfo};
@@ -109,26 +110,22 @@ mod windows_impl {
         format!("{letter}:")
     }
 
-    /// Drive letter (uppercase) of a configured destination path, if any.
-    fn dest_drive_letter(config: &Arc<RwLock<AppConfig>>) -> Option<char> {
-        config
-            .read()
-            .backup_destination
-            .as_ref()
-            .and_then(|d| d.chars().next())
-            .map(|c| c.to_ascii_uppercase())
+    /// The configured backup destination + drive identity, when both are set.
+    fn backup_target(config: &Arc<RwLock<AppConfig>>) -> Option<(String, String)> {
+        let cfg = config.read();
+        Some((cfg.backup_destination.clone()?, cfg.backup_drive_id.clone()?))
+    }
+
+    /// The part of a destination path after its drive root, e.g.
+    /// `E:\Backup\photos` -> `Backup\photos` (empty string for a drive root).
+    fn dest_subpath(dest: &str) -> Option<String> {
+        dest.split_once(":\\").map(|(_, rest)| rest.to_string())
     }
 
     /// The Windows drive type for a letter.
     fn drive_type(letter: char) -> u32 {
         let root = root_wide(letter);
         unsafe { GetDriveTypeW(PCWSTR(root.as_ptr())) }
-    }
-
-    /// Whether a drive holds a top-level `DCIM` folder — a strong "camera / card"
-    /// signal used to auto-offer backups even for fixed-type USB readers.
-    fn has_dcim(letter: char) -> bool {
-        PathBuf::from(format!("{letter}:\\DCIM")).is_dir()
     }
 
     /// Build a [`DeviceInfo`] for a drive if it holds at least one media file.
@@ -169,22 +166,38 @@ mod windows_impl {
             .collect()
     }
 
-    /// Inspect a newly-arrived drive; emit a connection event when it looks like a
-    /// media source (removable, or a fixed USB drive with a `DCIM` folder) that
-    /// holds media and isn't the configured backup destination.
+    /// Inspect a newly-arrived drive; when it is the configured backup drive —
+    /// recognised by its `.lumina-backup/drive.json` id matching the one we
+    /// recorded — emit a connection event carrying the destination resolved on
+    /// the *current* drive letter, so a changed letter still works.
     fn handle_new_drive(app: &AppHandle, config: &Arc<RwLock<AppConfig>>, letter: char) {
-        if is_system_drive(letter) || dest_drive_letter(config) == Some(letter) {
+        if is_system_drive(letter) {
             return;
         }
-        let dtype = drive_type(letter);
-        let looks_like_source = dtype == DRIVE_REMOVABLE || (dtype == DRIVE_FIXED && has_dcim(letter));
-        if !looks_like_source {
+        let Some((dest, want_id)) = backup_target(config) else {
+            return;
+        };
+        let Some(sub) = dest_subpath(&dest) else {
+            return;
+        };
+        let candidate = if sub.is_empty() {
+            format!("{letter}:\\")
+        } else {
+            format!("{letter}:\\{sub}")
+        };
+        if DriveMarker::read_id(Path::new(&candidate)).as_deref() != Some(want_id.as_str()) {
             return;
         }
-        if let Some(info) = media_info(letter) {
-            info!(drive = %letter, kind = dtype, media_count = info.media_count, "media device connected");
-            events::emit(app, events::names::DEVICE_CONNECTED, info);
-        }
+        info!(drive = %letter, "backup drive connected");
+        events::emit(
+            app,
+            events::names::DEVICE_CONNECTED,
+            DeviceInfo {
+                path: candidate,
+                label: volume_label(letter),
+                media_count: 0,
+            },
+        );
     }
 
     pub fn start(app: AppHandle, config: Arc<RwLock<AppConfig>>) {

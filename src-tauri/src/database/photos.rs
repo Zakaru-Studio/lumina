@@ -571,6 +571,41 @@ pub fn by_path_prefix(conn: &Connection, prefix: &str) -> Result<Vec<Photo>> {
     Ok(out)
 }
 
+/// The minimal per-photo identity the external-drive backup diff needs: the
+/// source path, its stored content hash (SHA-256, `None` if it was unreadable at
+/// import), and size + mtime for the staleness guard (re-hash only when the file
+/// on disk no longer matches the row).
+#[derive(Debug, Clone)]
+pub struct BackupItem {
+    pub path: String,
+    pub hash: Option<String>,
+    pub size: i64,
+    pub mtime: Option<i64>,
+}
+
+/// Every live photo's identity fields for the backup diff, ordered by path so
+/// the copy runs in a stable, resumable order. Cheap projection (four columns)
+/// so enumerating a large library stays fast.
+pub fn list_for_backup(conn: &Connection) -> Result<Vec<BackupItem>> {
+    let mut stmt = conn.prepare(
+        "SELECT path, hash, file_size, file_modified FROM photos \
+         WHERE deleted_at IS NULL ORDER BY path",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok(BackupItem {
+            path: r.get(0)?,
+            hash: r.get(1)?,
+            size: r.get::<_, i64>(2)?,
+            mtime: r.get(3)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
 /// Relocate every live photo at/under `old_prefix` to `new_prefix`, rewriting
 /// `path`/`folder`/`filename` **in place** so identity (id, rating, favorite,
 /// tags, album membership) is preserved, and refreshing the FTS index. Works for

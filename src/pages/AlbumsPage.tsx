@@ -1,20 +1,25 @@
-import { useState } from "react";
-import type { DragEvent } from "react";
+import { useRef, useState } from "react";
+import type { DragEvent, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import {
+  AlertTriangle,
   Aperture,
   Calendar,
   CalendarDays,
+  Check,
   FolderHeart,
   Heart,
   MoreHorizontal,
   Plus,
   Sun,
+  Trash2,
   Video,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -45,11 +50,13 @@ import {
   useAlbums,
   useCreateAlbum,
   useDeleteAlbum,
+  useDeleteAlbums,
   useRenameAlbum,
 } from "@/hooks/useAlbums";
 import { assetSrc } from "@/lib/api";
 import { albumLabel } from "@/lib/albumLabel";
 import { albumOptions } from "@/lib/albumTree";
+import { cn } from "@/lib/utils";
 import { useAlbumDelete } from "@/stores/albumDeleteStore";
 import type { Album } from "@/types";
 
@@ -109,6 +116,7 @@ export function AlbumsPage() {
   const createAlbum = useCreateAlbum();
   const renameAlbum = useRenameAlbum();
   const deleteAlbum = useDeleteAlbum();
+  const deleteAlbums = useDeleteAlbums();
   const addToAlbum = useAddToAlbum();
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -118,9 +126,78 @@ export function AlbumsPage() {
   const [renameName, setRenameName] = useState("");
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
+  // Multi-select for bulk deletion — manual albums only (smart albums can't be
+  // deleted). Local to this page; the anchor drives Shift-range selection.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const anchorRef = useRef<string | null>(null);
+
   // Hide date-relative smart albums (Today/This Week/This Month) when empty.
   const smart = albums.filter((a) => a.kind === "smart" && !isHiddenSmart(a));
   const manual = albums.filter((a) => a.kind === "manual");
+
+  const manualOrder = manual.map((a) => a.id);
+  const selectionActive = selectedIds.size > 0;
+  // How many of the selected albums are mirror albums (deleting them trashes a
+  // real on-disk folder) — drives the escalated confirmation copy.
+  const mirrorCount = manual.filter(
+    (a) => selectedIds.has(a.id) && a.folderPath != null,
+  ).length;
+
+  const toggleSelect = (id: string) => {
+    anchorRef.current = id;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  /** Select the inclusive range from the anchor to `id` within the manual grid. */
+  const selectRangeTo = (id: string) => {
+    const anchor = anchorRef.current;
+    const a = anchor === null ? -1 : manualOrder.indexOf(anchor);
+    const b = manualOrder.indexOf(id);
+    if (a === -1 || b === -1) {
+      toggleSelect(id);
+      return;
+    }
+    const [lo, hi] = a <= b ? [a, b] : [b, a];
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (let i = lo; i <= hi; i++) next.add(manualOrder[i]!);
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    anchorRef.current = null;
+  };
+
+  /** Card click: modifier / active-selection toggles; a plain click navigates. */
+  const handleCardClick = (e: MouseEvent<HTMLElement>, id: string) => {
+    if (e.shiftKey) {
+      e.preventDefault();
+      selectRangeTo(id);
+    } else if (e.ctrlKey || e.metaKey || selectionActive) {
+      toggleSelect(id);
+    } else {
+      navigate(`/albums/${id}`);
+    }
+  };
+
+  const confirmDeleteSelected = () => {
+    const ids = manualOrder.filter((id) => selectedIds.has(id));
+    if (ids.length === 0) return;
+    deleteAlbums.mutate(ids, {
+      onSuccess: () => {
+        setConfirmDeleteOpen(false);
+        clearSelection();
+      },
+    });
+  };
 
   const submitCreate = () => {
     const name = newName.trim();
@@ -202,16 +279,39 @@ export function AlbumsPage() {
           ) : null}
 
           <section>
-            <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-muted-foreground">
-              {t("albumsPage.myAlbums")}
-            </h2>
+            <div className="mb-4 flex min-h-8 items-center justify-between gap-4">
+              <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+                {t("albumsPage.myAlbums")}
+              </h2>
+              {selectionActive ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1 text-sm text-muted-foreground">
+                    {t("albumsPage.selectedCount", { count: selectedIds.size })}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-destructive hover:text-destructive"
+                    onClick={() => setConfirmDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {t("common.delete")}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="gap-1.5" onClick={clearSelection}>
+                    <X className="h-4 w-4" />
+                    {t("common.cancel")}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
               {manual.map((album) => {
                 const Icon = albumIcon(album.icon);
+                const selected = selectedIds.has(album.id);
                 return (
                   <Card
                     key={album.id}
-                    onClick={() => navigate(`/albums/${album.id}`)}
+                    onClick={(e) => handleCardClick(e, album.id)}
                     onDragOver={(e) => {
                       if (e.dataTransfer.types.includes("application/x-lumina-ids")) {
                         e.preventDefault();
@@ -227,11 +327,35 @@ export function AlbumsPage() {
                       if (photoIds.length)
                         addToAlbum.mutate({ albumId: album.id, photoIds });
                     }}
-                    className={`group relative cursor-pointer overflow-hidden border-0 bg-card transition-colors hover:bg-accent ${
-                      dropTarget === album.id ? "ring-2 ring-primary" : ""
-                    }`}
+                    className={cn(
+                      "group relative cursor-pointer overflow-hidden border-0 bg-card transition-colors hover:bg-accent",
+                      (selected || dropTarget === album.id) && "ring-2 ring-primary",
+                    )}
                   >
                     <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
+                      {/* Selection checkbox (top-left; the actions menu owns top-right). */}
+                      <button
+                        type="button"
+                        aria-label={selected ? t("albumsPage.deselectAlbum") : t("albumsPage.selectAlbum")}
+                        aria-pressed={selected}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (e.shiftKey) selectRangeTo(album.id);
+                          else toggleSelect(album.id);
+                        }}
+                        className={cn(
+                          "absolute left-2 top-2 z-10 flex h-[23px] w-[23px] items-center justify-center rounded-[5px] transition-all",
+                          selected
+                            ? "bg-primary text-primary-foreground shadow"
+                            : "bg-black/30 text-white/90 ring-1 ring-inset ring-white/70 backdrop-blur-sm hover:bg-black/45",
+                          selected || selectionActive
+                            ? "opacity-100"
+                            : "opacity-0 group-hover:opacity-100",
+                        )}
+                      >
+                        {selected ? <Check className="h-3.5 w-3.5" /> : null}
+                      </button>
+
                       {album.coverThumbPath ? (
                         <img
                           src={assetSrc(album.coverThumbPath)}
@@ -309,6 +433,29 @@ export function AlbumsPage() {
           </section>
         </div>
       )}
+
+      {/* Bulk-delete confirmation. Escalates its copy when the selection includes
+          mirror albums, whose real folders would be moved to the Recycle Bin. */}
+      <ConfirmDialog
+        open={confirmDeleteOpen}
+        onOpenChange={setConfirmDeleteOpen}
+        icon={
+          mirrorCount > 0 ? (
+            <AlertTriangle className="h-5 w-5 shrink-0 text-destructive" />
+          ) : undefined
+        }
+        title={t("albumsPage.deleteSelectedTitle", { count: selectedIds.size })}
+        description={
+          mirrorCount > 0
+            ? t("albumsPage.deleteSelectedMirror", { count: mirrorCount })
+            : t("albumsPage.deleteSelectedDescription")
+        }
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
+        variant="destructive"
+        isPending={deleteAlbums.isPending}
+        onConfirm={confirmDeleteSelected}
+      />
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

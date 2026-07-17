@@ -109,16 +109,10 @@ export function SettingsPage() {
     updateConfig.mutate({ ...config, ...partial });
   };
 
-  /** Manually look for a connected device and open the backup prompt for it.
-   * Discoverable fallback when auto-detection missed the arrival (e.g. the
-   * device was plugged in before launch). */
-  const backUpDeviceNow = async () => {
-    const devices = await api.listRemovableDevices().catch(() => []);
-    if (devices.length === 0) {
-      toast(t("settings.backup.noDevice"));
-      return;
-    }
-    useBackupDevice.getState().open(devices[0]);
+  /** Open the library-backup prompt for the configured destination. The dialog
+   * itself handles picking a drive when none is set yet. */
+  const backUpDeviceNow = () => {
+    useBackupDevice.getState().open();
   };
 
   /** Regenerate all thumbnails at the current configured size (progress shown

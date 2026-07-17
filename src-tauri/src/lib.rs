@@ -81,11 +81,7 @@ fn bootstrap(app: &tauri::App) -> Result<Arc<AppState>> {
         handle.clone(),
     ));
 
-    let backup = Arc::new(crate::backup::BackupManager::new(
-        db.clone(),
-        Arc::clone(&scanner),
-        handle.clone(),
-    ));
+    let backup = Arc::new(crate::backup::BackupManager::new(db.clone(), handle.clone()));
 
     let faces = Arc::new(crate::ai::face::FaceManager::new(
         db.clone(),
@@ -232,10 +228,11 @@ pub fn run() {
             // import as albums
             api::import::preview_import_tree,
             api::import::import_as_albums,
-            // device backup
+            // library backup
             api::backup::list_removable_devices,
             api::backup::preview_backup,
             api::backup::start_backup,
+            api::backup::cancel_backup,
             api::backup::backup_progress,
             // geocoding (map place names + location editor)
             api::geocode::reverse_geocode,

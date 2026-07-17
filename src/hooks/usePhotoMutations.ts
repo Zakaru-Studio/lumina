@@ -4,6 +4,7 @@
  * surface success via toasts, and offer Undo on removal.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import * as api from "@/lib/api";
@@ -186,16 +187,17 @@ export function useRestorePhotos() {
 }
 
 export function useRemovePhotos() {
+  const { t } = useTranslation();
   const invalidate = useDeleteInvalidation();
   const invalidateAll = usePhotoInvalidation();
   return useMutation({
     mutationFn: (ids: string[]) => api.removePhotos(ids),
     onSuccess: (_removed, ids) => {
       invalidate(ids);
-      toast.success(`Removed ${plural(ids.length, "photo")} from the catalog`, {
-        description: "The original files were not touched.",
+      toast.success(t("gallery.deleteToast.removedFromCatalog", { count: ids.length }), {
+        description: t("gallery.deleteToast.originalsUntouched"),
         action: {
-          label: "Undo",
+          label: t("common.undo"),
           onClick: () => {
             api
               .restorePhotos(ids)
@@ -203,9 +205,9 @@ export function useRemovePhotos() {
                 // Full refetch so restored photos rejoin every list, including
                 // the album photos we patched out on removal.
                 invalidateAll();
-                toast.success("Restored");
+                toast.success(t("common.restored"));
               })
-              .catch(() => toast.error("Could not restore"));
+              .catch(() => toast.error(t("common.restoreError")));
           },
         },
       });
@@ -219,17 +221,18 @@ export function useRemovePhotos() {
  * but the files stay recoverable from the system trash / Recycle Bin.
  */
 export function useDeletePhotosFromDisk() {
+  const { t } = useTranslation();
   const invalidate = useDeleteInvalidation();
   return useMutation({
     mutationFn: (ids: string[]) => api.deletePhotosFromDisk(ids),
     onSuccess: (_deleted, ids) => {
       invalidate(ids);
-      toast.success(`Deleted ${plural(ids.length, "photo")} from disk`, {
-        description: "The original files were moved to the trash.",
+      toast.success(t("gallery.deleteToast.deletedFromDisk", { count: ids.length }), {
+        description: t("gallery.deleteToast.movedToTrash"),
       });
     },
     onError: (err) =>
-      toast.error("Could not delete from disk", {
+      toast.error(t("gallery.deleteToast.deleteError"), {
         description: err instanceof Error ? err.message : String(err),
       }),
   });
@@ -247,6 +250,7 @@ export type DedupeMode = "catalog" | "trash";
  * `trash` (files sent to the OS trash).
  */
 export function useDedupeRemove() {
+  const { t } = useTranslation();
   const patchOut = useDeleteInvalidation();
   const invalidateAll = usePhotoInvalidation();
   const startExit = useDedupeExitStore((s) => s.start);
@@ -262,12 +266,12 @@ export function useDedupeRemove() {
         clearExit();
       }, DEDUPE_EXIT_MS);
 
-      const removed = `Deduplicated ${plural(ids.length, "copy", "copies")}`;
+      const removed = t("dedupe.deduplicated", { count: ids.length });
       if (mode === "catalog") {
         toast.success(removed, {
-          description: "Removed from the catalog; the files were not touched.",
+          description: t("dedupe.removedFromCatalog"),
           action: {
-            label: "Undo",
+            label: t("common.undo"),
             onClick: () => {
               // Cancel the pending drop and restore before the rows leave.
               window.clearTimeout(timer);
@@ -276,20 +280,20 @@ export function useDedupeRemove() {
                 .restorePhotos(ids)
                 .then(() => {
                   invalidateAll();
-                  toast.success("Restored");
+                  toast.success(t("common.restored"));
                 })
-                .catch(() => toast.error("Could not restore"));
+                .catch(() => toast.error(t("common.restoreError")));
             },
           },
         });
       } else {
         toast.success(removed, {
-          description: "Duplicate files were moved to the trash.",
+          description: t("dedupe.movedToTrash"),
         });
       }
     },
     onError: (err) =>
-      toast.error("Could not deduplicate", {
+      toast.error(t("dedupe.error"), {
         description: err instanceof Error ? err.message : String(err),
       }),
   });

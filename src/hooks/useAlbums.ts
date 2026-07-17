@@ -82,6 +82,23 @@ export function useDeleteAlbum() {
   return useMutation({ mutationFn: (id: string) => api.deleteAlbum(id), onSuccess: invalidate });
 }
 
+/**
+ * Delete several albums in one action, invalidating once at the end. Runs the
+ * deletions sequentially — mirror albums trash their real on-disk folder, so we
+ * avoid firing concurrent filesystem operations — and refreshes the list once
+ * they're all gone rather than after each.
+ */
+export function useDeleteAlbums() {
+  const invalidate = useAlbumInvalidation();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      for (const id of ids) await api.deleteAlbum(id);
+    },
+    onSuccess: invalidate,
+    onError: (e) => toast.error(String(e)),
+  });
+}
+
 export function useAddToAlbum() {
   const qc = useQueryClient();
   return useMutation({

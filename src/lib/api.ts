@@ -277,19 +277,22 @@ export const previewImportTree = (paths: string[]) =>
 export const importAsAlbums = (paths: string[], rootNames: string[], mirror: boolean) =>
   invoke<void>("import_as_albums", { paths, rootNames, mirror });
 
-// --- Device backup ---
+// --- Library backup ---
 
-/** List removable devices currently connected that hold media. */
+/** List removable devices currently connected that hold media (diagnostic). */
 export const listRemovableDevices = () =>
   invoke<DeviceInfo[]>("list_removable_devices");
 
-/** Preview how many files a backup would copy vs skip (fast, path+size based). */
-export const previewBackup = (source: string, dest: string) =>
-  invoke<BackupPreview>("preview_backup", { source, dest });
+/** Preview how many library photos a backup into `dest` would copy vs skip. */
+export const previewBackup = (dest: string) =>
+  invoke<BackupPreview>("preview_backup", { dest });
 
-/** Start backing up `source` into `dest`. Progress arrives via events. */
-export const startBackup = (source: string, dest: string) =>
-  invoke<void>("start_backup", { source, dest });
+/** Start backing up the library into `dest`. Progress arrives via events. */
+export const startBackup = (dest: string) =>
+  invoke<void>("start_backup", { dest });
+
+/** Ask the running backup to stop at the next file boundary. */
+export const cancelBackup = () => invoke<void>("cancel_backup");
 
 export const backupProgress = () =>
   invoke<BackupProgress>("backup_progress");

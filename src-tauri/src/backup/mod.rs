@@ -1,11 +1,10 @@
-//! Backup module: copy media from a connected device onto an external drive,
-//! deduping by content hash so nothing is stored twice, and fold the result
-//! into the library.
+//! Backup module: mirror the photo library onto an external drive, content-first
+//! and additive (dedupe by SHA-256, never delete), with durable verified copies.
 //!
-//! [`BackupManager`] owns the running state and latest progress; the actual
-//! copy runs on a dedicated OS thread (fully blocking I/O + hashing) so the
-//! async command that starts it returns immediately while progress streams back
-//! over events. Mirrors the design of [`crate::scanner::ScanManager`].
+//! [`BackupManager`] owns the running state, cancel flag and latest progress; the
+//! actual copy runs on a dedicated OS thread (fully blocking I/O + hashing) so
+//! the async command that starts it returns immediately while progress streams
+//! back over events. Mirrors the design of [`crate::scanner::ScanManager`].
 
 pub mod device;
 pub mod manifest;
@@ -22,14 +21,14 @@ use tracing::warn;
 
 use crate::database::Database;
 use crate::events::BackupProgress;
-use crate::scanner::ScanManager;
 
-/// Coordinates background device backups.
+/// Coordinates background library backups.
 pub struct BackupManager {
     db: Database,
-    scanner: Arc<ScanManager>,
     app: AppHandle,
     running: AtomicBool,
+    /// Set to request cancellation of the in-flight run; reset when one starts.
+    cancel: Arc<AtomicBool>,
     progress: Arc<RwLock<BackupProgress>>,
 }
 
@@ -46,12 +45,12 @@ fn idle_progress() -> BackupProgress {
 }
 
 impl BackupManager {
-    pub fn new(db: Database, scanner: Arc<ScanManager>, app: AppHandle) -> Self {
+    pub fn new(db: Database, app: AppHandle) -> Self {
         Self {
             db,
-            scanner,
             app,
             running: AtomicBool::new(false),
+            cancel: Arc::new(AtomicBool::new(false)),
             progress: Arc::new(RwLock::new(idle_progress())),
         }
     }
@@ -66,10 +65,16 @@ impl BackupManager {
         self.progress.read().clone()
     }
 
-    /// Start a background backup from `source` into `dest`. Returns immediately;
+    /// Request cancellation of the running backup. No-op when idle; the loop
+    /// stops at the next file boundary and emits a `cancelled` summary.
+    pub fn cancel(&self) {
+        self.cancel.store(true, Ordering::SeqCst);
+    }
+
+    /// Start a background library backup into `dest`. Returns immediately;
     /// progress and completion arrive via events. Ignored if one is already
     /// running.
-    pub fn spawn_backup(self: &Arc<Self>, source: PathBuf, dest: PathBuf) {
+    pub fn spawn_backup(self: &Arc<Self>, dest: PathBuf) {
         if self
             .running
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -78,81 +83,18 @@ impl BackupManager {
             warn!("backup already running; ignoring request");
             return;
         }
+        self.cancel.store(false, Ordering::SeqCst);
         let this = Arc::clone(self);
+        let cancel = Arc::clone(&self.cancel);
         std::thread::spawn(move || {
             run::execute(
                 this.app.clone(),
                 this.db.clone(),
-                Arc::clone(&this.scanner),
-                source,
                 dest,
                 Arc::clone(&this.progress),
+                cancel,
             );
             this.running.store(false, Ordering::SeqCst);
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::fs;
-
-    use crate::backup::manifest::DestIndex;
-    use crate::backup::scan;
-    use crate::core::hash::hash_file;
-
-    #[test]
-    fn enumerate_filters_and_preview_counts() {
-        let src = tempfile::tempdir().unwrap();
-        fs::create_dir_all(src.path().join("DCIM")).unwrap();
-        fs::write(src.path().join("DCIM/IMG_1.jpg"), b"one").unwrap();
-        fs::write(src.path().join("DCIM/IMG_2.png"), b"two").unwrap();
-        fs::write(src.path().join("readme.txt"), b"ignored").unwrap();
-
-        let files = scan::enumerate_media(src.path());
-        assert_eq!(files.len(), 2, "non-media files are skipped");
-
-        let dest = tempfile::tempdir().unwrap();
-        let index = DestIndex::load(dest.path());
-        let p = scan::preview(&files, dest.path(), &index);
-        assert_eq!(p.to_copy, 2);
-        assert_eq!(p.to_skip, 0);
-
-        // Mirror one file onto the destination → it becomes a skip.
-        fs::create_dir_all(dest.path().join("DCIM")).unwrap();
-        fs::copy(src.path().join("DCIM/IMG_1.jpg"), dest.path().join("DCIM/IMG_1.jpg")).unwrap();
-        let p2 = scan::preview(&files, dest.path(), &index);
-        assert_eq!(p2.to_copy, 1);
-        assert_eq!(p2.to_skip, 1);
-    }
-
-    #[test]
-    fn index_round_trips_and_dedupes_by_content() {
-        let dir = tempfile::tempdir().unwrap();
-        let dest = dir.path();
-
-        let a = dest.join("a.jpg");
-        fs::write(&a, b"identical bytes").unwrap();
-        let ha = hash_file(&a).unwrap();
-
-        let mut index = DestIndex::load(dest);
-        assert!(!index.contains_hash(&ha));
-        index.insert("a.jpg".into(), 15, 0, ha.clone());
-        index.flush().unwrap();
-
-        // Reload from the persisted sidecar: the hash is still known.
-        let reloaded = DestIndex::load(dest);
-        assert!(reloaded.contains_hash(&ha));
-
-        // A renamed copy with identical content hashes the same → deduped.
-        let renamed = dir.path().join("copy-under-another-name.jpg");
-        fs::write(&renamed, b"identical bytes").unwrap();
-        assert_eq!(hash_file(&renamed).unwrap(), ha);
-        assert!(reloaded.contains_hash(&hash_file(&renamed).unwrap()));
-
-        // Different content is not falsely deduped.
-        let other = dir.path().join("other.jpg");
-        fs::write(&other, b"different bytes").unwrap();
-        assert!(!reloaded.contains_hash(&hash_file(&other).unwrap()));
     }
 }

@@ -115,15 +115,23 @@ pub struct BackupProgress {
     pub current: Option<String>,
 }
 
-/// Emitted once a backup run completes.
+/// Emitted once a backup run completes (or stops early).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupSummary {
     pub copied: u64,
     pub skipped: u64,
+    /// Files that could not be read/copied/verified (surfaced to the user).
     pub failed: u64,
     pub bytes_copied: u64,
     pub duration_ms: u128,
+    /// `true` when the run was stopped by the user before finishing.
+    #[serde(default)]
+    pub cancelled: bool,
+    /// Set when the run aborted before starting the copy loop (e.g. the
+    /// destination was unwritable); `None` on a normal finish.
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 /// Incremental face-indexing progress payload.

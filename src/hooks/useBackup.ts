@@ -9,10 +9,10 @@ import { qk } from "@/lib/query";
 import { useBackupDevice } from "@/stores/backupDeviceStore";
 
 /**
- * Subscribe once (mount in the app shell) to device-connection and backup
- * events. A connected device auto-opens the backup prompt when the user has left
- * that preference on; progress and completion flow into the backup store, and a
- * finished copy refreshes the library.
+ * Subscribe once (mount in the app shell) to backup-drive-connection and backup
+ * events. Reconnecting the recognised backup drive auto-opens the prompt when the
+ * user has left that preference on; progress and completion flow into the backup
+ * store, and a finished copy refreshes the library caches.
  */
 export function useBackupEvents() {
   const qc = useQueryClient();
@@ -35,7 +35,6 @@ export function useBackupEvents() {
           useBackupDevice.getState().setDone(s);
           qc.invalidateQueries({ queryKey: qk.photos });
           qc.invalidateQueries({ queryKey: qk.stats });
-          qc.invalidateQueries({ queryKey: qk.watchedFolders });
         }),
       ]);
       if (active) unlisteners.push(...subs);

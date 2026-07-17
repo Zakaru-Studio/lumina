@@ -17,7 +17,10 @@
     "loading": "Chargement…",
     "back": "Retour",
     "change": "Changer…",
-    "actions": "Actions"
+    "actions": "Actions",
+    "undo": "Annuler",
+    "restored": "Restauré",
+    "restoreError": "Impossible de restaurer"
   },
   "nav": {
     "library": "Bibliothèque",
@@ -50,7 +53,16 @@
     "removeFromAlbum": "Retirer de l'album",
     "revealInExplorer": "Afficher dans l'Explorateur",
     "removeFromCatalog": "Retirer du catalogue",
-    "dontAskAgain": "Ne plus demander"
+    "dontAskAgain": "Ne plus demander",
+    "deleteToast": {
+      "removedFromCatalog_one": "{{count}} photo retirée du catalogue",
+      "removedFromCatalog_other": "{{count}} photos retirées du catalogue",
+      "originalsUntouched": "Les fichiers originaux n'ont pas été modifiés.",
+      "deletedFromDisk_one": "{{count}} photo supprimée du disque",
+      "deletedFromDisk_other": "{{count}} photos supprimées du disque",
+      "movedToTrash": "Les fichiers originaux ont été déplacés vers la corbeille.",
+      "deleteError": "Impossible de supprimer du disque"
+    }
   },
   "settings": {
     "appearance": {
@@ -106,17 +118,16 @@
       "add": "Ajouter un dossier…"
     },
     "backup": {
-      "title": "Sauvegarde des appareils",
-      "description": "Enregistrer les photos des appareils connectés sur un disque externe.",
+      "title": "Sauvegarde",
+      "description": "Sauvegardez votre bibliothèque sur un disque externe.",
       "destination": "Disque de sauvegarde",
       "destinationUnset": "Non défini",
       "choose": "Choisir",
       "autoPrompt": "Proposer au branchement",
-      "autoPromptHint": "Proposer la sauvegarde quand un appareil avec des photos est branché.",
+      "autoPromptHint": "Proposer la sauvegarde quand votre disque de sauvegarde est connecté.",
       "manual": "Sauvegarder maintenant",
-      "manualHint": "Chercher un appareil connecté et lancer une sauvegarde.",
-      "backupNow": "Sauvegarder un appareil",
-      "noDevice": "Aucun appareil connecté avec des photos n'a été trouvé."
+      "manualHint": "Copier les nouvelles photos de la bibliothèque sur le disque de sauvegarde.",
+      "backupNow": "Sauvegarder maintenant"
     },
     "library": {
       "title": "Bibliothèque",
@@ -216,13 +227,12 @@
     "confirm": "Déplacer vers la corbeille"
   },
   "backup": {
-    "title": "Sauvegarder {{label}} ?",
-    "description_one": "Cet appareil contient {{count}} photo. Les nouvelles sont copiées sur votre disque de sauvegarde ; les photos déjà enregistrées sont ignorées.",
-    "description_other": "Cet appareil contient {{count}} photos. Les nouvelles sont copiées sur votre disque de sauvegarde ; les photos déjà enregistrées sont ignorées.",
+    "title": "Sauvegarder votre bibliothèque",
+    "description": "Les nouvelles photos sont copiées sur votre disque de sauvegarde. Ce qui est déjà sauvegardé est ignoré, et rien n'est jamais supprimé du disque.",
     "chooseDestination": "Choisir le disque de sauvegarde",
     "changeDestination": "Changer de disque",
     "destinationLabel": "Disque de sauvegarde",
-    "noDestination": "Choisissez le disque externe où enregistrer les photos.",
+    "noDestination": "Choisissez le disque externe où sauvegarder votre bibliothèque.",
     "analyzing": "Analyse…",
     "previewNew_one": "{{count}} nouvelle photo",
     "previewNew_other": "{{count}} nouvelles photos",
@@ -230,13 +240,18 @@
     "previewSkip_other": "{{count}} déjà sauvegardées",
     "nothingNew": "Tout est déjà sauvegardé.",
     "start": "Sauvegarder",
-    "skip": "Ignorer",
+    "skip": "Plus tard",
+    "stop": "Arrêter",
+    "stopped": "Arrêtée",
     "copying": "Copie…",
     "copyingProgress": "Copie {{done}} / {{total}}",
     "close": "Fermer",
     "doneToast": "Sauvegarde terminée",
-    "doneSummary_one": "{{copied}} copiée · {{skipped}} ignorée",
-    "doneSummary_other": "{{copied}} copiées · {{skipped}} ignorées"
+    "cancelledToast": "Sauvegarde arrêtée",
+    "errorToast": "Échec de la sauvegarde",
+    "doneSummary": "{{copied}} copiées · {{skipped}} ignorées",
+    "failedCount_one": "{{count}} échec",
+    "failedCount_other": "{{count}} échecs"
   },
   "command": {
     "placeholder": "Rechercher des photos ou naviguer…",
@@ -500,6 +515,15 @@
     "photoCount_other": "{{count}} photos",
     "albumActions": "Actions de l'album",
     "deleteConfirm": "Supprimer l'album « {{name}} » ?",
+    "selectAlbum": "Sélectionner l'album",
+    "deselectAlbum": "Désélectionner l'album",
+    "selectedCount_one": "{{count}} sélectionné",
+    "selectedCount_other": "{{count}} sélectionnés",
+    "deleteSelectedTitle_one": "Supprimer {{count}} album ?",
+    "deleteSelectedTitle_other": "Supprimer {{count}} albums ?",
+    "deleteSelectedDescription": "Les albums sélectionnés seront supprimés. Vos photos restent dans votre bibliothèque.",
+    "deleteSelectedMirror_one": "{{count}} des albums sélectionnés est un album miroir — son dossier et tout son contenu seront placés dans la corbeille. Cette action est irréversible.",
+    "deleteSelectedMirror_other": "{{count}} des albums sélectionnés sont des albums miroirs — leurs dossiers et tout leur contenu seront placés dans la corbeille. Cette action est irréversible.",
     "newAlbum": "Nouvel album",
     "newAlbumTitle": "Nouvel album",
     "renameAlbumTitle": "Renommer l'album",
@@ -556,7 +580,12 @@
     "modeTrashHint": "Les fichiers en double sont déplacés vers la corbeille du système. Libère de l’espace disque.",
     "working": "Traitement…",
     "confirm": "Retirer {{count}} copie(s)",
-    "selectionAction": "Dédoublonner la sélection"
+    "selectionAction": "Dédoublonner la sélection",
+    "deduplicated_one": "{{count}} copie dédoublonnée",
+    "deduplicated_other": "{{count}} copies dédoublonnées",
+    "removedFromCatalog": "Retirées du catalogue ; les fichiers n'ont pas été modifiés.",
+    "movedToTrash": "Les fichiers en double ont été déplacés vers la corbeille.",
+    "error": "Impossible de dédoublonner"
   },
   "people": {
     "disabledTitle": "Reconnaissance des visages désactivée",

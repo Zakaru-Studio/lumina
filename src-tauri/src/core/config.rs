@@ -41,12 +41,17 @@ pub struct AppConfig {
     pub language: String,
     /// UI theme.
     pub theme: Theme,
-    /// Destination folder (on the external drive) for USB-device backups.
+    /// Destination folder (on the external drive) where the library is backed up.
     /// `None` => not configured yet; the user is asked to pick one on first use.
     #[serde(default)]
     pub backup_destination: Option<String>,
-    /// Whether connecting a device with photos should auto-open the backup
-    /// prompt. Defaults to `true` via [`default_true`].
+    /// Stable identity (UUID) of the backup drive, mirrored from the drive's
+    /// `.lumina-backup/drive.json` marker on the first backup. Lets the device
+    /// watcher recognise the backup drive even when its drive letter changes.
+    #[serde(default)]
+    pub backup_drive_id: Option<String>,
+    /// Whether reconnecting the backup drive should auto-open the backup prompt.
+    /// Defaults to `true` via [`default_true`].
     #[serde(default = "default_true")]
     pub auto_backup_prompt: bool,
     /// Default folder-management mode chosen at first import: `"mirror"` (albums
@@ -78,6 +83,7 @@ impl Default for AppConfig {
             language: "en".to_string(),
             theme: Theme::Dark,
             backup_destination: None,
+            backup_drive_id: None,
             auto_backup_prompt: true,
             folder_sync_mode: None,
             face_recognition_enabled: false,
