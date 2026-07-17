@@ -7,6 +7,8 @@ your disk, and originals are never modified.**
 
 Built with **Tauri v2 (Rust)** + **React + TypeScript**. No Electron.
 
+![Lumina — the Albums view](public/lumina-screenshot.png)
+
 ---
 
 ## Download
